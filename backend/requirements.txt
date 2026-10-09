@@ -1,0 +1,31 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+aiofiles==24.1.0
+opencv-python==4.14.0.94
+numpy==2.5.3
+
+# ---- STEP 6: pretrained visual deepfake model (EfficientNet-B7) ----------
+# torch >=2.6 is required for the model's TorchScript artifact (supports
+# >=2.6,<2.12). On Windows use the CPU wheel to keep the download small:
+#   pip install torch==2.7.0 --index-url https://download.pytorch.org/whl/cpu
+# (plain `pip install torch==2.7.0` also works and resolves to the same
+#  version on Windows). huggingface_hub downloads + verifies model.pt.
+torch==2.7.0
+# STEP 7: transformers requires huggingface-hub <2, so the previous 2.1.1 pin
+# is superseded; 1.33.0 is the verified installed version. The visual weight
+# loader's hf_hub_download() API is unchanged in 1.x (test suite confirms).
+huggingface-hub==1.33.0
+
+# ---- STEP 7: pretrained audio anti-deepfake model --------------------------
+# nii-yamagishilab/wav2vec-small-anti-deepfake (fairseq checkpoint converted
+# to HuggingFace Wav2Vec2Model format; conversion validated 211/211 keys).
+# safetensors reads the official model.safetensors; imageio-ffmpeg bundles the
+# FFmpeg 7.1 binary used to probe/extract audio (no system FFmpeg required).
+transformers==5.19.0
+safetensors==0.8.0
+imageio-ffmpeg==0.6.0
+
+# ---- tests ---------------------------------------------------------------
+pytest==9.1.1
+httpx==0.28.1
