@@ -59,6 +59,18 @@ def client():
         yield test_client
 
 
+@pytest.fixture(autouse=True)
+def history_db(tmp_path, monkeypatch):
+    """Point the history store at a per-test temp database.
+
+    Guarantees the test suite NEVER reads or writes the developer's real
+    ``backend/data/history.db``. Returns the resolved temp DB path.
+    """
+    db_path = tmp_path / "history_test.db"
+    monkeypatch.setenv("CLARITY_HISTORY_DB", str(db_path))
+    return db_path
+
+
 @pytest.fixture
 def face_video_path(tmp_path, face_image_path) -> Path:
     """Short MP4 (12 frames @ 12 fps) built from the face fixture."""

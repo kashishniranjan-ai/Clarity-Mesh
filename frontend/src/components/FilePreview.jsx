@@ -23,8 +23,16 @@ export default function FilePreview({ file, onRemove }) {
   }, [file, previewable]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="flex items-center justify-center bg-slate-900">
+    <div className="overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02] glass-card animate-fade-in">
+      {/* Preview area */}
+      <div className="relative flex items-center justify-center bg-black/40">
+        {/* Scan-line overlay for forensic feel */}
+        {previewable && previewUrl && (
+          <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
+            <div className="absolute inset-x-0 h-12 bg-gradient-to-b from-cyan-400/5 to-transparent animate-scan" />
+          </div>
+        )}
+
         {previewable && previewUrl && kind === 'image' && (
           <img
             src={previewUrl}
@@ -45,21 +53,22 @@ export default function FilePreview({ file, onRemove }) {
         )}
         {!previewable && (
           <div className="flex h-48 w-full flex-col items-center justify-center gap-2 px-4 text-center">
-            <svg viewBox="0 0 24 24" className="h-10 w-10 text-slate-500" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg viewBox="0 0 24 24" className="h-10 w-10 text-slate-600" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <rect x="3" y="5" width="14" height="14" rx="2" />
               <path d="M17 10l4-2.500v9L17 14" />
             </svg>
-            <p className="text-sm text-slate-300">
+            <p className="text-sm text-slate-500">
               Preview not available for .{getExtension(file.name).toUpperCase()} files in the browser.
             </p>
-            <p className="text-xs text-slate-400">The file can still be analyzed once the backend is connected.</p>
+            <p className="text-xs text-slate-600">The file can still be analyzed once the backend is connected.</p>
           </div>
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-3 p-4">
+      {/* File info bar */}
+      <div className="flex items-center justify-between gap-3 border-t border-white/5 p-4">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-slate-900" title={file.name}>
+          <p className="truncate text-sm font-semibold text-slate-200" title={file.name}>
             {file.name}
           </p>
           <p className="mt-0.5 text-xs text-slate-500">
@@ -69,7 +78,7 @@ export default function FilePreview({ file, onRemove }) {
         <button
           type="button"
           onClick={onRemove}
-          className="shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+          className="shrink-0 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-sm font-medium text-slate-400 transition-all duration-200 hover:border-rose-500/30 hover:bg-rose-500/5 hover:text-rose-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
           aria-label={`Remove ${file.name}`}
         >
           Remove

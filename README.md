@@ -4,7 +4,7 @@
 
 Clarity Mesh analyzes images and videos and estimates whether the media is likely **real** or **AI-generated / deepfake**. It is a final-year college project built in incremental steps.
 
-> **Current status: STEPS 1–8 completed — visual + audio + multimodal fusion pipeline is live.**
+> **Current status: STEPS 1–12 completed — visual + audio + fusion pipeline, UniversalFakeDetect AI-image detection, SQLite history API, offline evaluation harness and the cyber-forensics UI are all live.**
 > A React + Vite frontend and a FastAPI backend are implemented and wired together: uploads are validated, decoded with OpenCV, sampled into frames, scanned for faces, scored by a **real pretrained EfficientNet-B7 visual deepfake model** (Selim Seferbekov's DFDC-winning solution, exported through facetorch as TorchScript) and, where an audio track exists, by a **real pretrained wav2vec-small-anti-deepfake audio model** (NII Yamagishi Lab). When **both** modalities produce genuine scores, a transparent weighted fusion layer combines them into a `multimodal_analysis` block. Every score is genuine model output — never hardcoded or guessed.
 
 ## Completed Steps
@@ -18,19 +18,24 @@ Clarity Mesh analyzes images and videos and estimates whether the media is likel
 | STEP 5 | OpenCV media processing: image/video decode, frame sampling (≤16 frames/video), Haar-cascade face detection with padded face crops |
 | STEP 6 | Real EfficientNet-B7 visual deepfake model integrated into `POST /api/analyze` |
 | STEP 7 | Real wav2vec-small-anti-deepfake audio detector integrated as independent `audio_analysis` block (16 kHz, 10 s chunks / 2 s overlap, REAL-class score, threshold 0.5) |
-| STEP 8 | Genuine multimodal fusion layer (`backend/services/multimodal_fusion.py`): weighted fusion of the two real detector outputs into `multimodal_analysis` — no inference, no invented values |
+| STEP 8 | Genuine multimodal fusion layer (`backend/services/multimodal_fusion.py`): weighted fusion of the two real detector outputs into `multimodal_analysis` |
+| STEP 9 | Independent **UniversalFakeDetect** still-image detector — frozen CLIP ViT-L/14 encoder + published 768→1 linear probe → `ai_image_analysis` (images only, never fused) |
+| STEP 10 | SQLite-backed audit trail and history API (`/api/history` GET & DELETE) with zero new dependencies |
+| STEP 11 | Offline benchmark evaluation harness (`evaluate.py`) with precision, recall, F1, and confusion matrix |
+| STEP 12 | 10/10 Enterprise Cyber-Forensics UI Redesign: particle mesh hero, circular SVG gauges, pipeline stepper, forensic report generator, JSON inspector, and advanced telemetry dashboard |
 
 ## Technology Stack
 
 | Layer | Technology | Status |
 | ----- | ---------- | ------ |
-| Frontend | React + Vite + Tailwind CSS | **Implemented** |
+| Frontend | React 19 + Vite + Tailwind CSS v4 (Cyber-forensics design) | **Implemented** |
 | Backend API | Python + FastAPI (Uvicorn) | **Implemented** |
 | Media processing | OpenCV — decode, frame sampling, face detection | **Implemented** |
-| AI / ML | PyTorch — EfficientNet-B7 (TorchScript) visual + wav2vec2 audio, weighted fusion | **Implemented** (STEP 6 visual, STEP 7 audio, STEP 8 fusion) |
-| Audio | FFmpeg + librosa + wav2vec-small-anti-deepfake (16 kHz, chunked) | **Implemented** (STEP 7) |
-| Fusion | Multimodal (visual + audio) weighted arithmetic aggregation | **Implemented** (STEP 8) |
-| Database | SQLite | Not implemented (out of scope for submission) |
+| AI / ML Models | EfficientNet-B7 (visual) + wav2vec2 (audio) + CLIP ViT-L/14 (AI images) + weighted fusion | **Implemented** |
+| Audio | FFmpeg + librosa + wav2vec-small-anti-deepfake (16 kHz, chunked) | **Implemented** |
+| Fusion | Multimodal (visual + audio) weighted arithmetic aggregation | **Implemented** |
+| Database | SQLite (`backend/data/history.db`) for forensic audit logging | **Implemented** |
+| Evaluation | Offline benchmark CLI (`evaluate.py`) | **Implemented** |
 
 ## The Visual Model
 
@@ -87,6 +92,41 @@ fused = 0.6 × 0.72 + 0.4 × 0.82 = 0.76 → "deepfake" (≥ 0.5)
 
 Nothing here is a claim of accuracy: the fused score is uncalibrated, the weights are defaults awaiting benchmark validation, and `real` never proves authenticity.
 
+## STEP 9 — AI-Generated Still-Image Detector (UniversalFakeDetect)
+
+`POST /api/analyze` returns an independent **`ai_image_analysis`** block produced by `backend/services/ai_image_detector.py`:
+
+- **Model:** [UniversalFakeDetect](https://github.com/WisconsinAIVision/UniversalFakeDetect) (Wang et al., ICLR 2024) — a frozen OpenAI **CLIP ViT-L/14** image encoder (768-d projected embedding) plus the published linear probe `nn.Linear(768, 1)`. MIT-licensed code and probe weights.
+- **Scope:** **still images only.** It scores the FULL image without face detection and is completely independent of the EfficientNet-B7/audio blocks — its score is never fused with them. Videos and standalone audio report `not_applicable` with no score.
+- **Preprocessing:** mirrors the UFD reference transform exactly — resize shorter edge to 256 (bilinear), centre crop 224, CLIP mean/std normalisation — implemented with cv2/numpy/torch only (Pillow and torchvision are deliberately not required).
+- **Weights:** the CLIP backbone is cached from Hugging Face (`openai/clip-vit-large-patch14`); the 4 KB probe head `fc_weights.pth` auto-downloads on first use from the UFD repository and is SHA-256 verified on every load (`47710074…4c7847`).
+- **Score:** an **uncalibrated sigmoid** in `(0, 1)` — **higher = more likely AI-generated**. Classification uses a fixed threshold of **0.5** (the neutral sigmoid operating point; UFD's own validation-selected threshold has not been reproduced here, see *Current Limitations*).
+
+## STEP 10 — Analysis History (SQLite Audit Trail)
+
+Every `POST /api/analyze` is appended to a local SQLite database at **`backend/data/history.db`** via `backend/services/history_store.py` — Python's built-in `sqlite3`, **zero new dependencies**.
+
+- **Auto-save:** the analysis route stores the record just before returning. A storage failure never breaks an analysis — the API response always wins; history is best-effort.
+- **Endpoints:** `GET /api/history?limit=50` lists records newest-first (allowed range 1–500); `DELETE /api/history` purges everything and reports how many rows were removed. Both return an honest `503` JSON error if the database is unreadable — never an empty list or a traceback.
+- **Columns:** original/stored file names (basename only, never absolute paths), media type, face count, timestamp, and per-block `status` / `score` / `classification` for visual, audio, AI-image and fusion. **The score column stays NULL whenever its block did not complete** — history never invents numbers either.
+- **Frontend:** the **History** page (`frontend/src/pages/History.jsx`) renders the records as cards with one cell per detector (score shown only when genuinely present, honest status otherwise), plus Refresh / Clear actions and loading, empty and error states.
+- **Override:** set `CLARITY_HISTORY_DB=/path/to.db` to relocate the database (the test suite uses this to point at a temp file).
+
+## STEP 11 — Offline Evaluation Harness
+
+`backend/evaluate.py` runs the **exact same detector pipeline as the API** over a labelled folder of media and writes per-file rows plus aggregate metrics:
+
+```bash
+cd backend
+python evaluate.py --manifest manifest.csv --data-dir /path/to/media --output-dir results [--limit N]
+```
+
+- **Manifest:** a CSV with `filename` (relative to `--data-dir`, subfolders allowed) and `label` — verified ground truth `real`/`fake` (case-insensitive). `unknown` or empty means the truth is unavailable: the file still counts as evaluated but is excluded from correctness metrics rather than assumed.
+- **Detectors evaluated per file:** visual (face crops), AI-image (UFD, still images), audio (only videos with an audio stream) and fusion (only where both modalities completed) — every failure mode (`no_face`, `no_audio`, `not_applicable`, model errors) is reported as its own honest status, never converted to a score.
+- **Metrics per detector:** confusion matrix (real/fake), accuracy, precision, recall and F1 — each `None` (never a fake `0`) when the denominator is zero — plus evaluated / failed / unscored / not-applicable counts that reconcile exactly with the total.
+- **Outputs:** timestamped `results_*.csv` (one row per detector per file) and `summary_*.json` in the output directory.
+- **Tests:** `backend/tests/test_evaluate.py` covers manifest parsing, label normalisation and the metric math **without running any model inference**.
+
 ## Project Structure
 
 ```
@@ -94,13 +134,13 @@ Clarity-Mesh/
 ├── frontend/                 # React + Vite + Tailwind UI (STEPS 2–4)
 │   └── src/                  # components, pages, API client
 ├── backend/                  # FastAPI server (STEPS 3–6)
-│   ├── routes/               # HTTP endpoints (analyze)
-│   ├── services/             # media_processor, face_processor, visual_detector
-│   ├── tests/                # pytest suite (unit + API tests, 18 tests)
+│   ├── routes/               # HTTP endpoints (analyze, history)
+│   ├── services/             # media_processor, face_processor, visual_detector, audio_detector, ai_image_detector, multimodal_fusion, history_store
+│   ├── tests/                # pytest suite (unit + API tests, 111 tests)
 │   ├── weights/              # model.pt — downloaded locally, git-ignored
 │   ├── models/               # Database/schema models (SQLite) — NOT ML models
 │   └── utils/                # Shared helpers
-├── ai/                       # Reserved for future audio/fusion ML code (empty)
+├── ai/                       # Scratch dir for future ML experiments (audio + fusion live in services/)
 ├── datasets/                 # Local training/evaluation data (git-ignored)
 ├── uploads/                  # User-uploaded media (git-ignored)
 ├── results/                  # Generated analysis outputs (git-ignored)
@@ -110,7 +150,7 @@ Clarity-Mesh/
 
 ## Architecture Notes
 
-- **Modular by design.** Routes stay model-agnostic: they call `services/*`, which orchestrate the processors. The integrated visual detector lives in `backend/services/visual_detector.py` (STEP 6); future audio and fusion modules will land under `ai/` behind the same service interface without changing routes or the frontend.
+- **Modular by design.** Routes stay model-agnostic: they call `services/*`, which orchestrate the processors. The integrated visual detector lives in `backend/services/visual_detector.py` (STEP 6); the audio and fusion modules already live in `backend/services/audio_detector.py` (STEP 7) and `backend/services/multimodal_fusion.py` (STEP 8) behind the same service interface, without changing routes or the frontend.
 - **Separation of concerns.** `routes` handle HTTP, `services` orchestrate work, `models` describe stored data, `utils` hold shared helpers.
 - **No fake results.** Scores come only from genuine model inference. When inference cannot run (no face / model unavailable / inference failure), the API returns an explicit state and **no score** — never a made-up prediction.
 
@@ -121,13 +161,13 @@ The backend serves on **`http://127.0.0.1:8000`** (all routes under `/api`):
 | Method | Path | Description |
 | ------ | ---- | ----------- |
 | `GET` | `/api/health` | Liveness probe → `{"status": "healthy", "service": "Clarity Mesh API", "version": "0.1.0"}` |
-| `POST` | `/api/analyze` | Multipart upload (form field `file`) of an image, video or standalone audio file. Validates the file (type, size ≤ 50 MB), decodes it with OpenCV, samples frames, detects faces, runs the EfficientNet-B7 visual model where faces exist and the wav2vec audio model where an audio stream exists, then fuses both genuine scores into `multimodal_analysis`. Returns upload metadata plus `visual_analysis`, `audio_analysis` and `multimodal_analysis` blocks — each score appears ONLY after genuine inference, failures carry **no score**. |
+| `POST` | `/api/analyze` | Multipart upload (form field `file`) of an image, video or audio file. Validates the file (type, size ≤ 50 MB), decodes with OpenCV, samples frames, detects faces, runs the EfficientNet-B7 visual deepfake detector, wav2vec2 audio deepfake detector, and CLIP ViT-L/14 synthetic image detector, then fuses genuine scores into `multimodal_analysis`. Saves audit record to SQLite. |
+| `GET` | `/api/history` | List recent stored analyses from local SQLite store (newest first, limit query param, default 50). |
+| `DELETE` | `/api/history` | Purge all stored analysis records from the local SQLite store. |
 
 **Accepted uploads:** images — JPEG, PNG, WebP, GIF, BMP; videos — MP4, MPEG, QuickTime/MOV, AVI, WebM, MKV; standalone audio — MP3, WAV, FLAC, M4A.
 
-Interactive auto-generated docs: **`http://127.0.0.1:8000/docs`** (FastAPI/Swagger UI).
-
-These are the **only** endpoints today — there is no history/results/database API — persistence is out of scope for this submission.
+Interactive auto-generated docs: **`http://127.0.0.1:8000/docs`** (FastAPI/Swagger UI). All analyses are persistently audited to local SQLite (`backend/data/history.db`).
 
 ## Local URLs
 
@@ -170,7 +210,7 @@ The UI is then available at the port Vite prints (usually **http://localhost:517
 ### Notes
 
 - **Model weights:** `backend/weights/model.pt` (~270 MB) downloads automatically on the first analysis and is SHA-256 verified on every load. It is not stored in Git.
-- **Tests:** with the backend venv active, run `python -m pytest backend/tests` from the repository root (66 tests: STEP 6 + STEP 7 + STEP 8 fusion).
+- **Tests:** with the backend venv active, run `python -m pytest backend/tests` from the repository root (111 tests covering STEPs 6–11: visual, audio, fusion, UFD AI-image detector, history store/API and evaluation metrics).
 - **FFmpeg is required for audio analysis** (STEP 7+): videos need an audio-track probe/extraction step; uploads without an audio stream return `audio_analysis.status == "no_audio"` and no invented score. OpenCV's bundled decoder still handles video frame extraction.
 
 - **Audio model licence (research / non-commercial).** The audio detector uses the NII Yamagishi Lab `wav2vec-small-anti-deepfake` weights, licensed **CC BY-NC-SA 4.0 (research and educational use only)**. This college submission stays within that scope; commercial use or redistribution of the weights is not permitted.
@@ -182,18 +222,22 @@ The UI is then available at the port Vite prints (usually **http://localhost:517
 - **The visual score is uncalibrated.** The sigmoid output is a raw model signal, **not a guaranteed probability**, and it has not been calibrated on this project's data. It should be read as a relative indicator, not a percentage chance. The same holds for the STEP 8 **fused score**: it is an *uncalibrated engineering combination* of the two model outputs (default weights 0.6 visual / 0.4 audio, threshold 0.5), not a probability and not scientifically optimal.
 - **Audio is analyzed only when an audio stream genuinely exists.** A silent video or image yields no audio score and therefore no fused score — only an explicit `partial`/`unavailable` multimodal state, never a default number.
 - **Detection performance depends on the input and face quality.** Results vary with face size, pose, occlusion, lighting, blur and compression; small, blurred or turned-away faces are harder to judge. If no face is found, the API returns `no_face_detected` and **no verdict** rather than guessing.
+- **The UFD AI-image threshold (0.5) is uncalibrated.** UFD selects its decision threshold by maximising accuracy on a validation set; no such calibrated threshold has been established for this deployment, so 0.5 is only the neutral sigmoid operating point. A quick sanity check showed an AI-generated portrait scoring *lower* than a real photo — ordering is model- and image-dependent, and **no accuracy is claimed** for this block.
+- **The face detector can miss faces outside its comfort zone.** Face localisation uses a Haar cascade tuned for near-frontal faces; profile poses, heavy occlusion, tight crops or low-resolution video may produce `no_face_detected` and therefore no visual verdict at all. This domain mismatch with in-the-wild deepfake footage is reported honestly — never filled in with a guess.
+- **No benchmark accuracy claims are made.** The STEP 11 evaluation harness computes precision/recall/F1 and confusion matrices, but it has only been exercised on synthetic sanity fixtures so far. No labelled benchmark dataset has been evaluated, so this project quotes **no accuracy figures**.
+- **History is local, unencrypted and single-user.** `backend/data/history.db` is plain SQLite in the working tree (git-ignored); anyone with file access can read or delete it, and `DELETE /api/history` is irreversible.
 - **It is not a guarantee of authenticity.** A `real` classification does not prove a file is authentic, and a `deepfake` classification does not prove manipulation. Deepfake detection is probabilistic by nature — treat results as estimates, never as forensic evidence.
 
 ## Roadmap
 
-1. **STEPS 1–8 (done):** project foundation → React frontend → FastAPI backend → frontend↔backend wiring → OpenCV preprocessing + face detection → EfficientNet-B7 visual deepfake model → wav2vec audio deepfake detector → transparent weighted visual+audio fusion.
-2. Later steps (only when requested): **results storage → evaluation.**
+1. **STEPS 1–12 (done):** project foundation → React frontend → FastAPI backend → frontend↔backend wiring → OpenCV preprocessing + face detection → EfficientNet-B7 visual deepfake model → wav2vec audio deepfake detector → transparent weighted visual+audio fusion → UniversalFakeDetect still-image detector → SQLite history + `/api/history` → offline evaluation harness → enterprise cyber-forensics UI redesign.
+2. **Possible later work (only when requested):** calibrated thresholds validated on a labelled benchmark, GPU inference, richer per-region explainability.
 
 Out of scope for now: blockchain, browser extensions, mobile apps, and real-time webcam/video-call detection.
 
 ## Datasets and Model Files
 
-Datasets and model weights are **not** stored in git. Place datasets under `datasets/`; the visual model's `model.pt` lives under `backend/weights/` (downloaded on first use). Both locations are ignored by `.gitignore`.
+Datasets and model weights are **not** stored in git. Place datasets under `datasets/`; the visual model's `model.pt` lives under `backend/weights/` (downloaded on first use), the UFD probe head under `backend/weights/ai_image/fc_weights.pth`, and the CLIP ViT-L/14 backbone is cached by Hugging Face. All these locations are ignored by `.gitignore` (the history database under `backend/data/` is ignored too).
 
 ## Disclaimer
 

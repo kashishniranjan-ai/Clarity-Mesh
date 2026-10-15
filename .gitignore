@@ -87,10 +87,16 @@ weights/
 *.db
 *.sqlite
 *.sqlite3
+# Analysis-history SQLite DB lives under backend/data/ — ignore contents,
+# keep the directory itself trackable via .gitkeep.
+backend/data/*
+!backend/data/.gitkeep
 
 # ---- Logs ----
 *.log
 logs/
+backend/server.out
+backend/server.err
 
 # ---- IDE / OS ----
 .vscode/

@@ -4,8 +4,10 @@
  * Small helper around the FastAPI backend.
  *
  * The backend currently exposes:
- *   GET  /api/health
- *   POST /api/analyze   (multipart/form-data, field name: "file")
+ *   GET    /api/health
+ *   POST   /api/analyze   (multipart/form-data, field name: "file")
+ *   GET    /api/history   (list recent stored analyses, newest first)
+ *   DELETE /api/history   (clear the stored history)
  *
  * POST /api/analyze runs the full visual pipeline (OpenCV decode, frame
  * sampling, face detection and the pretrained EfficientNet-B7 deepfake
@@ -140,6 +142,55 @@ export async function getHealth() {
     });
   }
   return readJson(response);
+}
+
+/**
+ * GET /api/history — recent stored analyses, newest first.
+ *
+ * Resolves with `{ count, items }`. Each item mirrors what the API genuinely
+ * returned for that analysis: `*_score` fields are null when the block did
+ * not complete (nothing is fabricated).
+ */
+export async function getHistory(limit = 50) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/history?limit=${limit}`);
+  } catch {
+    throw new ApiError(
+      'Could not reach the backend to load history. Make sure it is running at ' +
+        `${API_BASE_URL}.`,
+      { status: 0, code: 'unreachable' },
+    );
+  }
+  const payload = await readJson(response);
+  if (!response.ok) {
+    const detail =
+      (typeof payload?.detail === 'string' && payload.detail) ||
+      `History request failed (HTTP ${response.status}).`;
+    throw new ApiError(detail, { status: response.status, code: 'http_error' });
+  }
+  return payload || { count: 0, items: [] };
+}
+
+/** DELETE /api/history — clear every stored analysis. */
+export async function clearHistory() {
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/history`, { method: 'DELETE' });
+  } catch {
+    throw new ApiError('Could not reach the backend to clear history.', {
+      status: 0,
+      code: 'unreachable',
+    });
+  }
+  const payload = await readJson(response);
+  if (!response.ok) {
+    const detail =
+      (typeof payload?.detail === 'string' && payload.detail) ||
+      `Could not clear history (HTTP ${response.status}).`;
+    throw new ApiError(detail, { status: response.status, code: 'http_error' });
+  }
+  return payload || { deleted: 0 };
 }
 
 /** Maps an ApiError to a user-facing message. */

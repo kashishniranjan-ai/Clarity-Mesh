@@ -1,23 +1,218 @@
+/* ── Google Fonts fallback ─────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
+/* ── Tailwind v4 theme tokens ─────────────────────────────────── */
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono",
+    Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Cyber-forensic accent palette */
+  --color-cyber-bg: #060a14;
+  --color-cyber-surface: #0c1222;
+  --color-cyber-card: #111827;
+  --color-cyber-border: rgba(148, 163, 184, 0.08);
+  --color-cyber-border-bright: rgba(6, 182, 212, 0.2);
+  --color-neon-cyan: #22d3ee;
+  --color-neon-blue: #60a5fa;
+  --color-neon-emerald: #34d399;
+  --color-neon-rose: #fb7185;
+  --color-neon-amber: #fbbf24;
+  --color-neon-purple: #a78bfa;
+
+  /* Keyframes */
+  --animate-fade-in: fade-in 0.5s ease-out both;
+  --animate-slide-up: slide-up 0.6s ease-out both;
+  --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
+  --animate-shimmer: shimmer 2.5s linear infinite;
+  --animate-spin-slow: spin 8s linear infinite;
+  --animate-scan: scan-line 3s ease-in-out infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-border-rotate: border-rotate 4s linear infinite;
+  --animate-count-up: count-up 1s ease-out both;
 }
 
+/* ── Keyframe definitions ─────────────────────────────────────── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(34, 211, 238, 0.2); }
+  50% { box-shadow: 0 0 24px rgba(34, 211, 238, 0.5), 0 0 48px rgba(34, 211, 238, 0.15); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes scan-line {
+  0%, 100% { transform: translateY(-100%); opacity: 0; }
+  10% { opacity: 0.5; }
+  50% { opacity: 0.3; }
+  90% { opacity: 0.5; }
+  100% { transform: translateY(100%); opacity: 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+
+@keyframes border-rotate {
+  from { --border-angle: 0deg; }
+  to { --border-angle: 360deg; }
+}
+
+@keyframes count-up {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes dash-march {
+  to { stroke-dashoffset: -20; }
+}
+
+@keyframes gauge-fill {
+  from { stroke-dashoffset: var(--gauge-circumference, 282.74); }
+  to { stroke-dashoffset: var(--gauge-target, 282.74); }
+}
+
+@keyframes text-gradient {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* ── Base layer ───────────────────────────────────────────────── */
 @layer base {
   html {
     scroll-behavior: smooth;
     scroll-padding-top: 5rem;
+    color-scheme: dark;
   }
 
   body {
-    @apply bg-slate-50 text-slate-800 antialiased;
+    @apply font-sans antialiased;
+    background: var(--color-cyber-bg);
+    color: #e2e8f0;
+    overflow-x: hidden;
+  }
+
+  /* Subtle mesh grid across the entire page */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.04;
+    background-image:
+      linear-gradient(to right, rgba(148,163,184,0.3) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(148,163,184,0.3) 1px, transparent 1px);
+    background-size: 48px 48px;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    html {
-      scroll-behavior: auto;
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
     }
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(34, 211, 238, 0.25);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(34, 211, 238, 0.45);
+  }
+
+  /* Selection color */
+  ::selection {
+    background: rgba(34, 211, 238, 0.3);
+    color: #fff;
+  }
+}
+
+/* ── Utility layer ────────────────────────────────────────────── */
+@layer utilities {
+  /* Glass card */
+  .glass-card {
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(16px) saturate(1.5);
+    -webkit-backdrop-filter: blur(16px) saturate(1.5);
+    border: 1px solid rgba(148, 163, 184, 0.08);
+    border-radius: 1rem;
+  }
+
+  .glass-card-bright {
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(20px) saturate(1.8);
+    -webkit-backdrop-filter: blur(20px) saturate(1.8);
+    border: 1px solid rgba(34, 211, 238, 0.12);
+    border-radius: 1rem;
+  }
+
+  /* Neon glow shadows */
+  .glow-cyan { box-shadow: 0 0 20px rgba(34, 211, 238, 0.15), 0 0 60px rgba(34, 211, 238, 0.05); }
+  .glow-emerald { box-shadow: 0 0 20px rgba(52, 211, 153, 0.15), 0 0 60px rgba(52, 211, 153, 0.05); }
+  .glow-rose { box-shadow: 0 0 20px rgba(251, 113, 133, 0.15), 0 0 60px rgba(251, 113, 133, 0.05); }
+  .glow-amber { box-shadow: 0 0 20px rgba(251, 191, 36, 0.15), 0 0 60px rgba(251, 191, 36, 0.05); }
+
+  /* Gradient text */
+  .text-gradient-cyber {
+    background: linear-gradient(135deg, #22d3ee 0%, #60a5fa 50%, #a78bfa 100%);
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: text-gradient 4s ease infinite;
+  }
+
+  /* Shimmer button effect */
+  .btn-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      110deg,
+      transparent 25%,
+      rgba(255,255,255,0.08) 50%,
+      transparent 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 3s linear infinite;
+  }
+
+  /* Staggered animation delays */
+  .delay-100 { animation-delay: 100ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-400 { animation-delay: 400ms; }
+  .delay-500 { animation-delay: 500ms; }
+  .delay-600 { animation-delay: 600ms; }
+  .delay-700 { animation-delay: 700ms; }
+
+  /* Gauge animation */
+  .gauge-animate {
+    animation: gauge-fill 1.2s ease-out forwards;
   }
 }

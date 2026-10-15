@@ -28,6 +28,8 @@ from services.media_processor import (
 )
 from services.multimodal_fusion import fuse_multimodal_results
 from services.visual_detector import analyse_media
+from services.ai_image_detector import analyse_ai_image
+from services.history_store import save_analysis
 
 router = APIRouter()
 
@@ -338,6 +340,29 @@ async def analyze_upload(file: UploadFile = File(...)):
             ),
         }
 
+    # ─── STEP 7b: AI-generated STILL-IMAGE detector (INDEPENDENT) ───────────
+    # services/ai_image_detector.py runs UniversalFakeDetect (CLIP ViT-L/14 +
+    # published 768→1 linear probe) over the FULL still image — no face
+    # detection, no fusion, completely separate from the EfficientNet-B7
+    # face-manipulation block above. Only still images are analysed; videos
+    # and audio return an honest "not_applicable" state instead of a score.
+    # Honest states: completed / not_applicable / invalid_input /
+    # model_unavailable / inference_failed — "score" exists ONLY after a
+    # genuine forward pass, and it is UNCALIBRATED (higher = more likely
+    # AI-generated), never a guaranteed probability.
+    try:
+        ai_image_analysis = analyse_ai_image(media_frames, media_type=media_kind)
+    except Exception as exc:  # defence in depth
+        ai_image_analysis = {
+            "status": "inference_failed",
+            "media_type": media_kind,
+            "images_analyzed": 0,
+            "message": (
+                f"Unexpected AI-image analysis error ({type(exc).__name__}: "
+                f"{exc}). No score or verdict was produced."
+            ),
+        }
+
     # ─── STEP 8: multimodal fusion over the two genuine blocks ────────────
     # services/multimodal_fusion.py performs NO model inference — it only
     # combines already-computed results. The visual score is FAKE-oriented
@@ -362,7 +387,7 @@ async def analyze_upload(file: UploadFile = File(...)):
             ),
         }
 
-    return {
+    response = {
         "status": "processed",
         "message": (
             "Media processed and the deepfake models were run where "
@@ -403,6 +428,15 @@ async def analyze_upload(file: UploadFile = File(...)):
         # NO score. This raw block is returned as-is for explainability.
         "audio_analysis": audio_analysis,
 
+        # ─── STEP 7b: AI-generated still-image result (real inference) ─────
+        # Independent UniversalFakeDetect block, still images only. "score" +
+        # "classification" are present ONLY when ai_image_analysis.status ==
+        # "completed" (a genuine forward pass). Videos/audio report
+        # "not_applicable"; failures report a status with NO score. The score
+        # is UNCALIBRATED (higher = more likely AI-generated) and is never
+        # fused with the visual or audio blocks.
+        "ai_image_analysis": ai_image_analysis,
+
         # ─── STEP 8: multimodal fusion (pure post-processing) ──────────────
         # Computed by services/multimodal_fusion.py WITHOUT any inference.
         # "fused_fake_score" exists ONLY when multimodal_analysis.status ==
@@ -411,3 +445,12 @@ async def analyze_upload(file: UploadFile = File(...)):
         # and NO default values for missing modalities.
         "multimodal_analysis": multimodal_analysis,
     }
+
+    # ─── Analysis history (SQLite, best-effort) ────────────────────────────
+    # The complete, honest response is persisted to the local history DB so
+    # the frontend History page survives refreshes and backend restarts.
+    # save_analysis never raises and returns None on failure — a history
+    # problem must never break or delay the analysis response contract.
+    save_analysis(response)
+
+    return response

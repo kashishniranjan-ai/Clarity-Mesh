@@ -30,30 +30,32 @@ uvicorn main:app --reload --port 8000
 | Method | Path           | Description                          |
 |--------|----------------|--------------------------------------|
 | GET    | `/api/health`  | Health-check / liveness probe        |
-| POST   | `/api/analyze` | Upload an image, video or standalone audio file; validates, decodes, samples frames, detects faces, runs the pretrained visual deepfake model where faces exist and the pretrained audio deepfake model where an audio stream exists, then fuses both genuine scores (STEP 8) into `multimodal_analysis` into `multimodal_analysis`. Each block carries a real model score **only** when its own inference genuinely succeeded. |
+| POST   | `/api/analyze` | Upload an image, video or audio file; validates, decodes, samples frames, detects faces, runs the pretrained visual deepfake model (EfficientNet-B7), audio deepfake model (wav2vec2), and AI image detector (CLIP ViT-L/14), then fuses genuine scores into `multimodal_analysis`. Each block carries a real model score **only** when its own inference genuinely succeeded. |
+| GET    | `/api/history` | List recent stored analyses from local SQLite store (newest first, limit configurable). |
+| DELETE | `/api/history` | Purge all stored analysis records from the local SQLite store. |
 
 ## Project Structure
 
-```
 backend/
 ├── main.py            # FastAPI app, CORS, health-check
+├── evaluate.py        # Offline benchmark evaluation CLI
 ├── routes/
 │   ├── __init__.py
-│   └── analysis.py    # /api/analyze upload endpoint
+│   ├── analysis.py    # /api/analyze upload endpoint
+│   └── history.py     # /api/history (GET / DELETE) SQLite persistence
 ├── services/
 │   ├── __init__.py
 │   ├── media_processor.py  # Decode, metadata, bounded frame sampling
 │   ├── face_processor.py   # OpenCV face detection, boxes & crops
-│   ├── visual_detector.py  # STEP 6: pretrained visual deepfake model inference
-│   ├── audio_detector.py   # STEP 7: pretrained audio deepfake model inference
-│   └── multimodal_fusion.py # STEP 8: pure fusion of the two genuine scores
-├── models/
-│   └── __init__.py    # (future Pydantic / DB models)
-├── utils/
-│   └── __init__.py    # (future shared utilities)
-├── weights/           # model.pt (downloaded + SHA-256 verified, git-ignored)
+│   ├── visual_detector.py  # Pretrained EfficientNet-B7 deepfake model inference
+│   ├── audio_detector.py   # Pretrained wav2vec2 audio deepfake model inference
+│   ├── ai_image_detector.py# Pretrained CLIP ViT-L/14 synthetic image detector
+│   ├── multimodal_fusion.py# Multimodal score fusion and classification
+│   └── history_store.py    # SQLite audit trail persistence
+├── data/              # SQLite database (history.db, git-ignored)
+├── weights/           # Pretrained weights (downloaded + SHA-256 verified, git-ignored)
 ├── uploads/           # Uploaded media files
-├── tests/             # pytest suite: visual (STEP 6) + audio (STEP 7) + fusion (STEP 8) + API
+├── tests/             # pytest suite (111 unit & integration tests)
 ├── requirements.txt   # pinned deps (FastAPI, torch CPU, librosa, soundfile, …)
 └── README.md          # this file
 ```
@@ -119,5 +121,7 @@ is frontal-biased; CPU inference is ≈1.35 s/crop (bounded by
 The audio detector uses the NII Yamagishi Lab wav2vec-small-anti-deepfake weights, licensed **CC BY-NC-SA 4.0 (research and educational use only)**. This submission stays within that scope; commercial use or redistribution of the weights is not permitted.
 
 
-Database persistence of results and multimodal benchmark evaluation
-(weights validation, calibration research).
+### Audit persistence & Benchmark evaluation
+
+- **Database Persistence:** Every completed analysis is logged to local SQLite (`backend/data/history.db`) via `services/history_store.py` with zero new external dependencies, queryable and purgable via `/api/history`.
+- **Benchmark Evaluation:** `evaluate.py` provides an offline evaluation CLI computing precision, recall, F1, accuracy, and confusion matrix over labeled test datasets.
