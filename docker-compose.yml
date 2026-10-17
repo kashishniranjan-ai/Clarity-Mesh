@@ -1,0 +1,35 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      CLARITY_HISTORY_DB: /app/backend/data/history.db
+      HF_HOME: /home/mesh/.cache/huggingface
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-astra}
+    volumes:
+      - clarity_data:/app/backend/data
+      - clarity_uploads:/app/backend/uploads
+      - clarity_weights:/app/backend/weights
+      - model_cache:/home/mesh/.cache/huggingface
+    expose:
+      - "8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ""
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${CLARITY_WEB_PORT:-8080}:80"
+
+volumes:
+  clarity_data:
+  clarity_uploads:
+  clarity_weights:
+  model_cache:

@@ -1,0 +1,106 @@
+# =========================
+# Clarity Mesh .gitignore
+# =========================
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Node.js / React / Vite ----
+node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
+.vite/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+
+# ---- Environment variables / secrets ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---- Uploaded files, results (keep folder via .gitkeep) ----
+uploads/*
+!uploads/.gitkeep
+!uploads/README.md
+backend/uploads/*
+!backend/uploads/.gitkeep
+results/*
+!results/.gitkeep
+!results/README.md
+
+# ---- Datasets (keep folder via .gitkeep) ----
+datasets/*
+!datasets/.gitkeep
+!datasets/README.md
+
+# ---- Model files / weights ----
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.h5
+*.hdf5
+*.pkl
+*.joblib
+*.safetensors
+*.bin
+checkpoints/
+weights/
+
+# ---- Media files (avoid committing large samples) ----
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+*.wav
+*.mp3
+*.flac
+
+# ---- Database ----
+*.db
+*.sqlite
+*.sqlite3
+# Analysis-history SQLite DB lives under backend/data/ — ignore contents,
+# keep the directory itself trackable via .gitkeep.
+backend/data/*
+!backend/data/.gitkeep
+
+# ---- Logs ----
+*.log
+logs/
+backend/server.out
+backend/server.err
+
+# ---- IDE / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
