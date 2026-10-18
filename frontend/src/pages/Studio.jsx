@@ -1,10 +1,13 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { analyzeMedia, describeApiError } from '../services/api';
+import { analyzeMedia, describeApiError, requestExplainability } from '../services/api';
+
+const EXPLAIN_IDLE = { gradcam: { status: 'idle' }, occlusion: { status: 'idle' } };
 
 export default function Studio() {
-  const [activeInspector, setActiveInspector] = useState('ela'); // 'ela' | 'fft' | 'residual'
+  const [activeInspector, setActiveInspector] = useState('ela'); // 'ela' | 'fft' | 'residual' | 'gradcam' | 'occlusion'
   const [sliderPosition, setSliderPosition] = useState(50);
+  const [overlayOpacity, setOverlayOpacity] = useState(85);
   const [isMagnifierActive, setIsMagnifierActive] = useState(false);
   const [magnifierPos, setMagnifierPos] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
@@ -15,6 +18,8 @@ export default function Studio() {
   const [uploadError, setUploadError] = useState('');
   const [customUpload, setCustomUpload] = useState(null);
   const [activeSample, setActiveSample] = useState('ai_portrait');
+  // AI explainability heatmaps (fetched lazily per method for custom uploads)
+  const [explain, setExplain] = useState(EXPLAIN_IDLE);
 
   const samples = {
     ai_portrait: {
@@ -62,6 +67,7 @@ export default function Studio() {
     if (!file || isUploading) return;
     setUploadError('');
     setIsUploading(true);
+    setExplain(EXPLAIN_IDLE); // new file — previous heatmaps are stale
 
     try {
       const originalUrl = URL.createObjectURL(file);
@@ -100,6 +106,7 @@ export default function Studio() {
           `Processed ${file.name}. 2D Fourier FFT lattice anomaly score: ${(fftScore * 100).toFixed(1)}%, Error Level Analysis variance: ${(elaScore * 100).toFixed(1)}%.`,
         verdict: result.calibrated_ensemble?.verdict_label || 'Forensic Analysis Completed',
         isCustom: true,
+        savedAs: result.file?.saved_as || null,
       };
 
       setCustomUpload(customData);
@@ -116,13 +123,80 @@ export default function Studio() {
     if (file) handleFileUpload(file);
   };
 
+  // ── AI explainability (Grad-CAM / occlusion) ────────────────────────────
+  const fetchExplain = async (method) => {
+    const storedAs = customUpload?.savedAs;
+    if (!storedAs) return;
+    setExplain((prev) => ({ ...prev, [method]: { status: 'loading' } }));
+    try {
+      const payload = await requestExplainability(storedAs, method);
+      setExplain((prev) => ({ ...prev, [method]: { status: 'ready', payload } }));
+    } catch (err) {
+      setExplain((prev) => ({
+        ...prev,
+        [method]: { status: 'error', message: describeApiError(err) },
+      }));
+    }
+  };
+
+  const selectInspector = (id) => {
+    setActiveInspector(id);
+    if (
+      (id === 'gradcam' || id === 'occlusion') &&
+      current?.isCustom &&
+      current.savedAs &&
+      explain[id].status === 'idle'
+    ) {
+      fetchExplain(id);
+    }
+  };
+
+  const explainStatusText = (id) => {
+    const state = explain[id];
+    if (!state) return '';
+    if (state.status === 'loading') return 'computing…';
+    if (state.status === 'error') return 'unavailable';
+    const payload = state.payload;
+    if (!payload) return '';
+    if (payload.status === 'completed') {
+      return `baseline ${(payload.baseline_score * 100).toFixed(1)}%`;
+    }
+    return String(payload.status).replaceAll('_', ' ');
+  };
+
+  const explainNote = (id) => {
+    const state = explain[id];
+    if (!state) return null;
+    if (state.status === 'idle') {
+      return current?.isCustom
+        ? null
+        : 'Demo samples have no backend analysis — upload a file to use AI explainability.';
+    }
+    if (state.status === 'loading') {
+      return 'Computing heatmap with the EfficientNet-B7 model — this runs real inference and can take a few seconds…';
+    }
+    if (state.status === 'error') return state.message;
+    const payload = state.payload || {};
+    if (payload.status === 'completed') return payload.note;
+    return payload.error || payload.message || payload.suggestion || null;
+  };
+
   const getOverlayImage = () => {
+    if (
+      (activeInspector === 'gradcam' || activeInspector === 'occlusion') &&
+      explain[activeInspector].payload?.heatmap_b64
+    ) {
+      return explain[activeInspector].payload.heatmap_b64;
+    }
     if (activeInspector === 'ela') return current.elaPreview || current.original;
     if (activeInspector === 'fft') return current.fftPreview || current.original;
     return current.noisePreview || current.original;
   };
 
   const getOverlayFilter = () => {
+    if (activeInspector === 'gradcam' || activeInspector === 'occlusion') {
+      return ''; // real model heatmaps — no CSS simulation filter
+    }
     // If we have actual server base64 heatmaps, don't apply CSS simulation filters
     const hasRealHeatmap = (activeInspector === 'ela' && current.elaPreview?.startsWith('data:')) ||
       (activeInspector === 'fft' && current.fftPreview?.startsWith('data:')) ||
@@ -259,19 +333,41 @@ export default function Studio() {
                 { id: 'ela', label: 'ELA Heatmap', score: current.elaScore },
                 { id: 'fft', label: '2D FFT Spectrum', score: current.fftScore },
                 { id: 'residual', label: 'SRM Noise', score: current.noiseScore },
+                { id: 'gradcam', label: 'Grad-CAM', explain: true },
+                { id: 'occlusion', label: 'Occlusion', explain: true },
               ].map((mode) => (
                 <button
                   key={mode.id}
                   type="button"
-                  onClick={() => setActiveInspector(mode.id)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase transition-all flex items-center gap-1.5 ${
+                  onClick={() => selectInspector(mode.id)}
+                  disabled={Boolean(mode.explain) && !current.isCustom}
+                  title={
+                    Boolean(mode.explain) && !current.isCustom
+                      ? 'Demo samples have no backend analysis — upload a file first.'
+                      : undefined
+                  }
+                  className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase transition-all flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${
                     activeInspector === mode.id
                       ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/50 shadow-[0_0_15px_rgba(6,182,212,0.3)]'
                       : 'bg-white/5 text-slate-400 hover:text-white'
                   }`}
                 >
                   <span>{mode.label}</span>
-                  <span className="text-[10px] font-mono text-cyan-400 font-extrabold">({(mode.score * 100).toFixed(0)}%)</span>
+                  {mode.explain ? (
+                    <span className="text-[10px] font-mono text-cyan-400 font-extrabold">
+                      {explain[mode.id].status === 'loading'
+                        ? '…'
+                        : explain[mode.id].status === 'ready'
+                          ? explain[mode.id].payload?.status === 'completed'
+                            ? '✓'
+                            : '✗'
+                          : ''}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-mono text-cyan-400 font-extrabold">
+                      ({(mode.score * 100).toFixed(0)}%)
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -291,6 +387,14 @@ export default function Studio() {
             </div>
           </div>
 
+          {/* AI explainability state note (Grad-CAM / occlusion) */}
+          {(activeInspector === 'gradcam' || activeInspector === 'occlusion') &&
+            explainNote(activeInspector) && (
+              <p className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] leading-relaxed text-slate-400">
+                {explainNote(activeInspector)}
+              </p>
+            )}
+
           {/* Interactive Split-View Canvas with Laser Scanner Effect */}
           <div
             ref={containerRef}
@@ -303,11 +407,19 @@ export default function Studio() {
                 src={getOverlayImage()}
                 alt="Forensic layer"
                 className={`h-full w-full object-contain transition-all duration-300 ${getOverlayFilter()}`}
+                style={{ opacity: overlayOpacity / 100 }}
               />
               <span className="absolute bottom-4 right-4 rounded-md bg-black/80 border border-cyan-500/40 px-3 py-1 text-[11px] font-black text-cyan-400 uppercase tracking-wider backdrop-blur-md">
-                Forensic: {activeInspector.toUpperCase()} ({(
-                  (activeInspector === 'ela' ? current.elaScore : activeInspector === 'fft' ? current.fftScore : current.noiseScore) * 100
-                ).toFixed(1)}%)
+                Forensic: {activeInspector.toUpperCase()}{' '}
+                {activeInspector === 'gradcam' || activeInspector === 'occlusion'
+                  ? `(${explainStatusText(activeInspector)})`
+                  : `${(
+                      (activeInspector === 'ela'
+                        ? current.elaScore
+                        : activeInspector === 'fft'
+                          ? current.fftScore
+                          : current.noiseScore) * 100
+                    ).toFixed(1)}%)`}
               </span>
             </div>
 
@@ -370,6 +482,21 @@ export default function Studio() {
               className="w-full accent-cyan-400 cursor-pointer"
             />
             <span className="text-xs text-cyan-300 font-bold uppercase">Forensic Overlay</span>
+          </div>
+
+          {/* Overlay Opacity Slider (applies to every forensic overlay layer) */}
+          <div className="flex items-center gap-3 pt-1">
+            <span className="text-xs text-slate-400 font-bold uppercase">Overlay Opacity</span>
+            <input
+              type="range"
+              min="10"
+              max="100"
+              value={overlayOpacity}
+              onChange={(e) => setOverlayOpacity(Number(e.target.value))}
+              className="w-full accent-cyan-400 cursor-pointer"
+              aria-label="Forensic overlay opacity"
+            />
+            <span className="text-xs text-cyan-300 font-bold uppercase">{overlayOpacity}%</span>
           </div>
         </div>
 

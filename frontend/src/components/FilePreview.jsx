@@ -43,6 +43,7 @@ export default function FilePreview({ file, onRemove }) {
         )}
         {previewable && previewUrl && kind === 'video' && (
           <video
+            id="cm-preview-video"
             src={previewUrl}
             controls
             preload="metadata"

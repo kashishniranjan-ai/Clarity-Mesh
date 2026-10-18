@@ -2,10 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import UploadZone from './UploadZone';
 import FilePreview from './FilePreview';
+import FrameTimeline from './FrameTimeline';
+import ProvenanceCard from './ProvenanceCard';
 import {
   API_BASE_URL,
   MAX_UPLOAD_SIZE_MB,
   analyzeMedia,
+  downloadAnalysisReport,
   describeApiError,
 } from '../services/api';
 import { formatFileSize, getMediaKind } from '../utils/file';
@@ -582,6 +585,7 @@ export default function AnalyzeSection() {
   const [isUploading, setIsUploading] = useState(false);
   const [result, setResult] = useState(null);
   const [resultsTab, setResultsTab] = useState('overview'); // 'overview' | 'spectrogram' | 'evidence' | 'radar'
+  const [pdfState, setPdfState] = useState({ busy: false, error: '' });
   const resultRef = useRef(null);
 
   const handleFileSelect = (selected) => {
@@ -664,6 +668,31 @@ export default function AnalyzeSection() {
   const multimodal = result?.multimodal_analysis || null;
   const ensemble = result?.calibrated_ensemble || null;
   const forensicSignals = result?.forensic_signals || {};
+
+  const seekPreviewToFrame = (frame) => {
+    const video = document.getElementById('cm-preview-video');
+    const fps = result?.fps;
+    if (!video || !fps || !Number.isFinite(fps) || fps <= 0) return;
+    video.currentTime = Math.max(0, frame / fps);
+    video.play().catch(() => {});
+  };
+
+  const handlePdfDownload = async () => {
+    if (!result?.analysis_id || pdfState.busy) return;
+    setPdfState({ busy: true, error: '' });
+    try {
+      const blob = await downloadAnalysisReport(result.analysis_id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `clarity-mesh-report-${result.analysis_id}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setPdfState({ busy: false, error: '' });
+    } catch (err) {
+      setPdfState({ busy: false, error: describeApiError(err) });
+    }
+  };
 
   return (
     <section id="analyze" className="relative mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
@@ -829,6 +858,19 @@ export default function AnalyzeSection() {
                 ))}
               </div>
 
+{/* Per-frame video score timeline (recharts) with click-to-seek */}
+              {result?.media_type === 'video' &&
+                Array.isArray(visual?.per_frame_scores) &&
+                visual.per_frame_scores.length > 1 && (
+                <FrameTimeline
+                  perFrameScores={visual.per_frame_scores}
+                  fps={result.fps}
+                  durationSeconds={result.duration_seconds}
+                  threshold={visual.threshold}
+                  onSeek={seekPreviewToFrame}
+                />
+              )}
+
               {/* TAB 1: MODALITY CARDS (Includes real multi-spectral signals and neural modalities) */}
               {resultsTab === 'overview' && (
                 <div className="space-y-6">
@@ -985,6 +1027,10 @@ export default function AnalyzeSection() {
                       </div>
                     )}
                   </div>
+                  <ProvenanceCard
+                    provenance={result?.provenance}
+                    metadata={forensicSignals.metadata}
+                  />
                 </div>
               )}
 
@@ -1029,6 +1075,19 @@ export default function AnalyzeSection() {
                 >
                   📥 Export Forensic Report JSON
                 </button>
+                {result?.analysis_id != null && (
+                  <button
+                    type="button"
+                    onClick={handlePdfDownload}
+                    disabled={pdfState.busy}
+                    className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-500/20 transition-all disabled:opacity-60"
+                  >
+                    {pdfState.busy ? 'Generating PDF…' : '🧾 Export PDF Report (Chain of Custody)'}
+                  </button>
+                )}
+                {pdfState.error && (
+                  <span className="text-xs font-semibold text-rose-300">{pdfState.error}</span>
+                )}
               </div>
             </motion.div>
           )}

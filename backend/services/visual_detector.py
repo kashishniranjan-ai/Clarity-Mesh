@@ -338,6 +338,21 @@ def classify(score: float) -> str:
     return "deepfake" if score >= CLASSIFICATION_THRESHOLD else "real"
 
 
+def _per_frame_means(scored: list[tuple[int, float]]) -> list[dict[str, Any]]:
+    """Group per-crop (frame_index, score) pairs by frame (mean within frame).
+
+    Powers the frontend video timeline: every entry is genuine model output
+    aggregated per sampled frame — never interpolated or invented.
+    """
+    buckets: dict[int, list[float]] = {}
+    for index, score in scored:
+        buckets.setdefault(int(index), []).append(float(score))
+    return [
+        {"frame": frame, "score": round(sum(vals) / len(vals), 4)}
+        for frame, vals in sorted(buckets.items())
+    ]
+
+
 # ---------------------------------------------------------------------------
 # End-to-end analysis over the sampled frames
 # ---------------------------------------------------------------------------
@@ -484,6 +499,11 @@ def analyse_media(
         "score": round(mean_score, 4),
         "classification": classify(mean_score),
         "per_face_scores": [round(value, 4) for value in scores],
+        "per_frame_scores": _per_frame_means(scored),
+        "per_frame_note": (
+            "mean of per-face scores within each sampled frame; "
+            "frame time = frame_index / video fps"
+        ),
         "message": (
             f"Ran {MODEL_NAME} on {len(scored)} face crop(s) across "
             f"{frames_used} frame(s); aggregated by mean of per-face scores."

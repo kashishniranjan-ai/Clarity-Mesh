@@ -28,7 +28,9 @@ from routes.analysis import router as analysis_router
 from routes.assistant import router as assistant_router
 from routes.auth import router as auth_router
 from routes.cases import router as cases_router
+from routes.explain import router as explain_router
 from routes.history import router as history_router
+from routes.reports import router as reports_router
 from services.audit_store import init_audit_db
 from services.auth_store import init_auth_db, seed_admin
 from services.history_store import HistoryStoreError, init_db
@@ -133,6 +135,8 @@ app.include_router(cases_router, prefix="/api/cases", tags=["cases"])
 app.include_router(assistant_router, prefix="/api/assistant", tags=["assistant"])
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
+app.include_router(explain_router, prefix="/api/explain", tags=["explainability"])
+app.include_router(reports_router, prefix="/api/reports", tags=["reports"])
 
 # ---------------------------------------------------------------------------
 # Dependency injection: JWT + RBAC enforcement

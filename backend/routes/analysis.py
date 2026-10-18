@@ -38,6 +38,7 @@ from services.forensic_engine import (
     perform_fft_spectral_analysis,
     perform_noise_and_texture_analysis,
 )
+from services.provenance import extract_provenance
 from services.auth_deps import get_client_ip, get_current_user
 from services.audit_store import log_audit_event
 from services.telemetry_service import record_latency
@@ -457,6 +458,14 @@ async def analyze_upload(
         "metadata": metadata_result,
     }
 
+    # ─── STEP 9b: Provenance & chain-of-custody anchors ────────────────────
+    # Integrity hash + EXIF/container/C2PA facts for the Provenance card.
+    # Extraction failures are reported honestly and never break the analysis.
+    try:
+        provenance = extract_provenance(save_path, media_kind)
+    except Exception as exc:
+        provenance = {"status": "failed", "error": str(exc)}
+
     response = {
         "status": "processed",
         "message": (
@@ -499,6 +508,9 @@ async def analyze_upload(
         # ─── STEP 9: Advanced Forensic Signals & Calibrated Ensemble ──────
         "forensic_signals": forensic_signals,
         "calibrated_ensemble": calibrated_ensemble,
+
+        # ─── STEP 9b: Provenance & chain-of-custody anchors ──────────────
+        "provenance": provenance,
     }
 
     # ─── Analysis history (SQLite, best-effort) ────────────────────────────
@@ -506,7 +518,11 @@ async def analyze_upload(
     # the frontend History page survives refreshes and backend restarts.
     # save_analysis never raises and returns None on failure — a history
     # problem must never break or delay the analysis response contract.
-    save_analysis(response)
+    analysis_id = save_analysis(response)
+    if analysis_id is not None:
+        # Additive field: lets the frontend request the PDF chain-of-custody
+        # report for this exact record without a second lookup.
+        response["analysis_id"] = analysis_id
 
     log_audit_event(
         action="ANALYZE_MEDIA",

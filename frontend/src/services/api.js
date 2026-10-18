@@ -231,6 +231,51 @@ export async function getHealth() {
   return readJson(response);
 }
 
+/**
+ * POST /api/explain — generate a Grad-CAM / occlusion heatmap for a
+ * previously analysed upload (referenced by its sanitized stored_name).
+ */
+export function requestExplainability(storedName, method = 'occlusion') {
+  return jsonApi('/api/explain', {
+    method: 'POST',
+    body: JSON.stringify({ stored_name: storedName, method }),
+  });
+}
+
+/**
+ * GET /api/reports/{id}/pdf — download the chain-of-custody PDF report.
+ * Returns a Blob; the caller triggers the browser download.
+ */
+export async function downloadAnalysisReport(analysisId) {
+  const headers = buildAuthHeaders();
+  let response;
+  try {
+    response = await fetch(
+      `${API_BASE_URL}/api/reports/${encodeURIComponent(analysisId)}/pdf`,
+      { headers },
+    );
+  } catch {
+    throw new ApiError('Could not reach the backend for the PDF report.', {
+      status: 0,
+      code: 'unreachable',
+    });
+  }
+  if (response.status === 401) {
+    handleUnauthorized();
+  }
+  if (!response.ok) {
+    let detail = `Report export failed (HTTP ${response.status}).`;
+    try {
+      const payload = await response.json();
+      if (typeof payload?.detail === 'string') detail = payload.detail;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(detail, { status: response.status, code: 'http_error' });
+  }
+  return response.blob();
+}
+
 /** GET /api/history — recent stored analyses. */
 export async function getHistory(limit = 50) {
   return jsonApi(`/api/history?limit=${limit}`);
