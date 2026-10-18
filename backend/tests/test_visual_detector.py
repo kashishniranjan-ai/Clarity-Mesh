@@ -226,3 +226,28 @@ def test_same_input_gives_identical_score(face_image_path):
 
     assert first is not None and second is not None
     assert first == second, "model output must be deterministic in eval mode"
+
+
+# ---------------------------------------------------------------------------
+# 11 — Per-frame timeline scores with timestamp and bounding box
+# ---------------------------------------------------------------------------
+def test_per_frame_scores_have_timestamp_and_box():
+    scored = [
+        (0, 0.42, {"x": 10, "y": 20, "width": 80, "height": 80}),
+        (0, 0.88, {"x": 100, "y": 20, "width": 85, "height": 85}),
+        (10, 0.35, {"x": 12, "y": 22, "width": 78, "height": 78}),
+    ]
+    frames = vd._per_frame_means(scored, fps=25.0)
+    assert len(frames) == 2
+    f0 = frames[0]
+    assert f0["frame"] == 0
+    assert f0["score"] == 0.65
+    assert f0["timestamp_s"] == 0.0
+    assert f0["top_face_box"] == {"x": 100, "y": 20, "width": 85, "height": 85}
+
+    f1 = frames[1]
+    assert f1["frame"] == 10
+    assert f1["score"] == 0.35
+    assert f1["timestamp_s"] == 0.4
+    assert f1["top_face_box"] == {"x": 12, "y": 22, "width": 78, "height": 78}
+

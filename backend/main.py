@@ -30,6 +30,7 @@ from routes.auth import router as auth_router
 from routes.cases import router as cases_router
 from routes.explain import router as explain_router
 from routes.history import router as history_router
+from routes.narrative import router as narrative_router
 from routes.reports import router as reports_router
 from services.audit_store import init_audit_db
 from services.auth_deps import get_current_user, require_admin
@@ -178,6 +179,8 @@ app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(explain_router, prefix="/api/explain", tags=["explainability"])
 app.include_router(reports_router, prefix="/api/reports", tags=["reports"])
+app.include_router(narrative_router, prefix="/api/narrative", tags=["narrative"])
+app.include_router(narrative_router, prefix="/api", tags=["narrative"])
 
 # ---------------------------------------------------------------------------
 # Dependency injection: JWT + RBAC enforcement

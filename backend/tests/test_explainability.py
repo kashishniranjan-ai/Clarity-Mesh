@@ -108,6 +108,11 @@ def test_occlusion_completes_with_batched_passes(tmp_path, monkeypatch):
     assert result["status"] == "completed"
     assert result["method"] == "occlusion"
     assert result["heatmap_b64"].startswith("data:image/png;base64,")
+    assert result["original_crop_b64"].startswith("data:image/png;base64,")
+    assert result["heatmap_crop_b64"].startswith("data:image/png;base64,")
+    assert result["overlay_b64"].startswith("data:image/png;base64,")
+    assert result["overlay_opacity"] == 0.5
+    assert isinstance(result["peak_regions"], list)
     assert result["grid"] == 4
     assert result["passes"] == 16
     assert result["batch_size"] == 8
@@ -141,3 +146,19 @@ def test_invalid_method_is_rejected(tmp_path, monkeypatch):
     monkeypatch.setattr(explainability, "UPLOAD_DIR", tmp_path)
     result = explainability.generate_explanation("x.jpg", method="saliency")
     assert result["status"] == "invalid_method"
+
+
+def test_explain_visual_endpoint(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(explainability, "UPLOAD_DIR", tmp_path)
+    _write_solid_jpeg(tmp_path / "test_visual.jpg")
+    _patch_faces(monkeypatch)
+    monkeypatch.setattr(vd, "_load_model", lambda: (FakeModel(), None))
+
+    # Test JSON with stored_name
+    res = client.post("/api/explain/visual", json={"stored_name": "test_visual.jpg", "method": "occlusion"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "completed"
+    assert data["original_crop_b64"].startswith("data:image/png;base64,")
+    assert data["overlay_b64"].startswith("data:image/png;base64,")
+    assert "peak_regions" in data

@@ -227,19 +227,120 @@ def _gradcam_heatmap(model: Any, tensor: Any) -> tuple[np.ndarray, dict[str, Any
 
 
 # ---------------------------------------------------------------------------
+def _label_face_region(cx: float, cy: float) -> str:
+    """Deterministic anatomical region label based on normalized face crop coordinates (0..1)."""
+    if cy < 0.28:
+        return "forehead / upper hairline"
+    elif cy < 0.48:
+        side = "left" if cx < 0.5 else "right"
+        return f"{side} periorbital / eye region"
+    elif cy < 0.65:
+        return "nasal / mid-facial region"
+    elif cy < 0.82:
+        return "perioral / mouth & lips region"
+    else:
+        return "chin / jawline margin"
+
+
+def _extract_peak_regions(heat: np.ndarray, top_k: int = 4) -> list[dict[str, Any]]:
+    """
+    Extract bounding boxes (normalized 0..1) of peak activation regions.
+    Uses thresholding + contour analysis on the normalized saliency map.
+    """
+    if heat is None or heat.size == 0:
+        return []
+
+    max_val = float(heat.max())
+    if max_val < 0.15:
+        return []
+
+    # Threshold at 65% of max activation (minimum 0.35)
+    thresh_val = max(0.35, max_val * 0.65)
+    heat_u8 = ((heat >= thresh_val).astype(np.uint8)) * 255
+    contours, _ = cv2.findContours(heat_u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    h_map, w_map = heat.shape[:2]
+    regions: list[dict[str, Any]] = []
+
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if area < 25:  # filter tiny noise specks
+            continue
+        rx, ry, rw, rh = cv2.boundingRect(cnt)
+        sub_heat = heat[ry:ry + rh, rx:rx + rw]
+        peak_intensity = float(sub_heat.max()) if sub_heat.size > 0 else max_val
+
+        norm_x = round(float(rx) / w_map, 3)
+        norm_y = round(float(ry) / h_map, 3)
+        norm_w = round(float(rw) / w_map, 3)
+        norm_h = round(float(rh) / h_map, 3)
+
+        cx = norm_x + norm_w / 2.0
+        cy = norm_y + norm_h / 2.0
+
+        description = _label_face_region(cx, cy)
+        regions.append({
+            "x": norm_x,
+            "y": norm_y,
+            "w": norm_w,
+            "h": norm_h,
+            "peak_intensity": round(peak_intensity, 4),
+            "description": description,
+        })
+
+    regions.sort(key=lambda r: (r["peak_intensity"], r["w"] * r["h"]), reverse=True)
+
+    # Fallback to single peak region if contours were too small
+    if not regions and max_val >= 0.25:
+        max_idx = np.unravel_index(np.argmax(heat), heat.shape)
+        my, mx = int(max_idx[0]), int(max_idx[1])
+        box_size = 45
+        rx = max(0, mx - box_size // 2)
+        ry = max(0, my - box_size // 2)
+        rw = min(w_map - rx, box_size)
+        rh = min(h_map - ry, box_size)
+        norm_x = round(float(rx) / w_map, 3)
+        norm_y = round(float(ry) / h_map, 3)
+        norm_w = round(float(rw) / w_map, 3)
+        norm_h = round(float(rh) / h_map, 3)
+        cx = norm_x + norm_w / 2.0
+        cy = norm_y + norm_h / 2.0
+        regions.append({
+            "x": norm_x,
+            "y": norm_y,
+            "w": norm_w,
+            "h": norm_h,
+            "peak_intensity": round(max_val, 4),
+            "description": _label_face_region(cx, cy),
+        })
+
+    return regions[:top_k]
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 def _find_first_face(
-    frames: list[tuple[int, Any]], boxes_by_frame: dict[int, list[dict[str, int]]]
+    frames: list[tuple[int, Any]],
+    boxes_by_frame: dict[int, list[dict[str, int]]],
+    target_frame: int | None = None,
 ) -> tuple[int, Any, dict[str, int], tuple[int, int, int, int], Any] | None:
     """
-    First deterministic face crop (ascending frame index).
+    First face crop, prioritizing target_frame if specified, else ascending frame index.
 
     Returns ``(frame_index, frame, box, crop_rect_xyxy, crop)`` or ``None``.
     ``crop_rect_xyxy`` replicates face_processor.crop_face's 15% padding so
     the heat can be mapped back onto the full frame exactly.
     """
-    for index, frame in sorted(frames, key=lambda pair: pair[0]):
+    sorted_frames = sorted(frames, key=lambda pair: pair[0])
+    if target_frame is not None:
+        target_frames = [pair for pair in sorted_frames if pair[0] == target_frame]
+        other_frames = [pair for pair in sorted_frames if pair[0] != target_frame]
+        ordered_frames = target_frames + other_frames
+    else:
+        ordered_frames = sorted_frames
+
+    for index, frame in ordered_frames:
         boxes = boxes_by_frame.get(index, []) or []
         if frame is None or getattr(frame, "size", 0) == 0:
             continue
@@ -258,11 +359,16 @@ def _find_first_face(
     return None
 
 
-def generate_explanation(stored_name: str, method: str = "occlusion") -> dict[str, Any]:
+def generate_explanation(
+    stored_name: str,
+    method: str = "occlusion",
+    frame_index: int | None = None,
+) -> dict[str, Any]:
     """
     Produce an explainability payload for one stored upload.
 
     Honest states: ``invalid_stored_name``, ``file_not_found``,
+
     ``not_applicable`` (audio), ``media_processing_failed``,
     ``no_face_detected``, ``model_unavailable``, ``inference_failed``,
     ``gradcam_unavailable`` and ``completed``.  ``heatmap_b64`` exists ONLY
@@ -315,7 +421,7 @@ def generate_explanation(stored_name: str, method: str = "occlusion") -> dict[st
 
     face_summary = analyse_frames(frames)
     boxes_by_frame = face_summary.get("boxes", {}) or {}
-    found = _find_first_face(frames, boxes_by_frame)
+    found = _find_first_face(frames, boxes_by_frame, target_frame=frame_index)
     if found is None:
         return {
             "status": "no_face_detected",
@@ -324,7 +430,7 @@ def generate_explanation(stored_name: str, method: str = "occlusion") -> dict[st
                 "can be produced. This is NOT a real/deepfake verdict."
             ),
         }
-    frame_index, frame, box, crop_rect, crop = found
+    frame_index_found, frame, box, crop_rect, crop = found
 
     model, error = vd._load_model()
     if model is None:
@@ -387,22 +493,43 @@ def generate_explanation(stored_name: str, method: str = "occlusion") -> dict[st
                 "model": vd.MODEL_NAME,
             }
 
+    # Full frame heatmap
     frame_heat = _place_crop_heatmap_into_frame(heat, frame.shape, crop_rect)
     heat_u8 = (np.clip(frame_heat, 0.0, 1.0) * 255).astype(np.uint8)
     colored = cv2.applyColorMap(heat_u8, cv2.COLORMAP_INFERNO)
     heatmap_b64 = _data_url_from_bgr(colored)
+
+    # Face crop visual assets
+    crop_resized = cv2.resize(crop, (vd.INPUT_SIZE, vd.INPUT_SIZE), interpolation=cv2.INTER_AREA)
+    original_crop_b64 = _data_url_from_bgr(crop_resized)
+
+    crop_heat_u8 = (np.clip(heat, 0.0, 1.0) * 255).astype(np.uint8)
+    colored_crop = cv2.applyColorMap(crop_heat_u8, cv2.COLORMAP_INFERNO)
+    heatmap_crop_b64 = _data_url_from_bgr(colored_crop)
+
+    # Blended overlay (50% original face crop, 50% heatmap)
+    blended_crop = cv2.addWeighted(crop_resized, 0.5, colored_crop, 0.5, 0.0)
+    overlay_b64 = _data_url_from_bgr(blended_crop)
+
+    # Peak activation regions
+    peak_regions = _extract_peak_regions(heat)
 
     latency_ms = int((time.perf_counter() - started) * 1000)
     return {
         "status": "completed",
         "method": method,
         "heatmap_b64": heatmap_b64,
+        "original_crop_b64": original_crop_b64,
+        "heatmap_crop_b64": heatmap_crop_b64,
+        "overlay_b64": overlay_b64,
+        "overlay_opacity": 0.5,
+        "peak_regions": peak_regions,
         "model": vd.MODEL_NAME,
         "model_source": vd.MODEL_SOURCE_URL,
         "baseline_score": round(baseline, 4),
         "baseline_classification": vd.classify(baseline),
         "threshold": vd.CLASSIFICATION_THRESHOLD,
-        "frame_index": int(frame_index),
+        "frame_index": int(frame_index_found),
         "face_box": {k: int(v) for k, v in box.items()},
         "frame_size": [int(frame.shape[1]), int(frame.shape[0])],
         "latency_ms": latency_ms,
@@ -412,6 +539,125 @@ def generate_explanation(stored_name: str, method: str = "occlusion") -> dict[st
             "WHAT the model reacted to — it is NOT proof of manipulation and "
             "does not calibrate the score."
         ),
+        **method_meta,
+    }
+
+
+def explain_image_bgr(image_bgr: np.ndarray, method: str = "occlusion") -> dict[str, Any]:
+    """
+    Run explainability directly on a decoded BGR image array.
+    """
+    started = time.perf_counter()
+    if image_bgr is None or getattr(image_bgr, "size", 0) == 0:
+        return {
+            "status": "media_processing_failed",
+            "error": "Provided image array is empty or invalid.",
+        }
+
+    from services.face_processor import analyse_frames
+    frames: list[tuple[int, Any]] = [(0, image_bgr)]
+    face_summary = analyse_frames(frames)
+    boxes_by_frame = face_summary.get("boxes", {}) or {}
+    found = _find_first_face(frames, boxes_by_frame)
+    if found is None:
+        return {
+            "status": "no_face_detected",
+            "message": (
+                "No face was available for the visual model, so no heatmap "
+                "can be produced. This is NOT a real/deepfake verdict."
+            ),
+        }
+    frame_index, frame, box, crop_rect, crop = found
+
+    model, error = vd._load_model()
+    if model is None:
+        return {
+            "status": "model_unavailable",
+            "message": f"Visual deepfake model unavailable: {error}. No heatmap can be produced.",
+        }
+
+    torch = vd._import_torch()
+    tensor = vd.preprocess_face(crop)
+    if tensor is None:
+        return {
+            "status": "inference_failed",
+            "error": "The selected face crop could not be preprocessed for the model.",
+        }
+
+    try:
+        with torch.no_grad():
+            logits = model(tensor).reshape(-1)
+            baseline = float(torch.sigmoid(logits[0]).item())
+    except Exception as exc:
+        return {
+            "status": "inference_failed",
+            "error": f"Baseline forward pass failed: {type(exc).__name__}: {exc}",
+        }
+    if not math.isfinite(baseline):
+        return {
+            "status": "inference_failed",
+            "error": "Baseline forward pass produced a non-finite score.",
+        }
+
+    method_meta: dict[str, Any]
+    if method == "occlusion":
+        grid = _env_int("CLARITY_EXPLAIN_GRID", 6, 3, 8)
+        batch_size = _env_int("CLARITY_EXPLAIN_BATCH", 12, 1, 32)
+        try:
+            heat, method_meta = _occlusion_heatmap(model, tensor, baseline, grid, batch_size)
+        except Exception as exc:
+            return {
+                "status": "inference_failed",
+                "error": f"Occlusion forwards failed: {type(exc).__name__}: {exc}",
+            }
+    else:  # gradcam
+        try:
+            heat, method_meta = _gradcam_heatmap(model, tensor)
+        except _GradCamUnavailable as exc:
+            return {
+                "status": "gradcam_unavailable",
+                "method": "gradcam",
+                "error": str(exc),
+                "suggestion": "Use the occlusion sensitivity method.",
+                "model": vd.MODEL_NAME,
+            }
+
+    frame_heat = _place_crop_heatmap_into_frame(heat, frame.shape, crop_rect)
+    heat_u8 = (np.clip(frame_heat, 0.0, 1.0) * 255).astype(np.uint8)
+    colored = cv2.applyColorMap(heat_u8, cv2.COLORMAP_INFERNO)
+    heatmap_b64 = _data_url_from_bgr(colored)
+
+    crop_resized = cv2.resize(crop, (vd.INPUT_SIZE, vd.INPUT_SIZE), interpolation=cv2.INTER_AREA)
+    original_crop_b64 = _data_url_from_bgr(crop_resized)
+
+    crop_heat_u8 = (np.clip(heat, 0.0, 1.0) * 255).astype(np.uint8)
+    colored_crop = cv2.applyColorMap(crop_heat_u8, cv2.COLORMAP_INFERNO)
+    heatmap_crop_b64 = _data_url_from_bgr(colored_crop)
+
+    blended_crop = cv2.addWeighted(crop_resized, 0.5, colored_crop, 0.5, 0.0)
+    overlay_b64 = _data_url_from_bgr(blended_crop)
+    peak_regions = _extract_peak_regions(heat)
+
+    latency_ms = int((time.perf_counter() - started) * 1000)
+    return {
+        "status": "completed",
+        "method": method,
+        "heatmap_b64": heatmap_b64,
+        "original_crop_b64": original_crop_b64,
+        "heatmap_crop_b64": heatmap_crop_b64,
+        "overlay_b64": overlay_b64,
+        "overlay_opacity": 0.5,
+        "peak_regions": peak_regions,
+        "model": vd.MODEL_NAME,
+        "model_source": vd.MODEL_SOURCE_URL,
+        "baseline_score": round(baseline, 4),
+        "baseline_classification": vd.classify(baseline),
+        "threshold": vd.CLASSIFICATION_THRESHOLD,
+        "frame_index": 0,
+        "face_box": {k: int(v) for k, v in box.items()},
+        "frame_size": [int(frame.shape[1]), int(frame.shape[0])],
+        "latency_ms": latency_ms,
+        "note": "Grad-CAM/Occlusion explainability on direct image input.",
         **method_meta,
     }
 

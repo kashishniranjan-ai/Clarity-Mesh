@@ -338,19 +338,39 @@ def classify(score: float) -> str:
     return "deepfake" if score >= CLASSIFICATION_THRESHOLD else "real"
 
 
-def _per_frame_means(scored: list[tuple[int, float]]) -> list[dict[str, Any]]:
-    """Group per-crop (frame_index, score) pairs by frame (mean within frame).
+def _per_frame_means(
+    scored: list[tuple[int, float] | tuple[int, float, dict[str, int]]],
+    fps: float = 0.0,
+) -> list[dict[str, Any]]:
+    """Group per-crop pairs by frame (mean within frame).
 
     Powers the frontend video timeline: every entry is genuine model output
     aggregated per sampled frame — never interpolated or invented.
+    Includes timestamp_s (calculated from frame / fps) and top_face_box.
     """
-    buckets: dict[int, list[float]] = {}
-    for index, score in scored:
-        buckets.setdefault(int(index), []).append(float(score))
-    return [
-        {"frame": frame, "score": round(sum(vals) / len(vals), 4)}
-        for frame, vals in sorted(buckets.items())
-    ]
+    buckets: dict[int, list[tuple[float, dict[str, int] | None]]] = {}
+    for item in scored:
+        if len(item) >= 3:
+            index, score, box = item[0], item[1], item[2]
+        else:
+            index, score = item[0], item[1]
+            box = None
+        buckets.setdefault(int(index), []).append((float(score), box))
+
+    result: list[dict[str, Any]] = []
+    for frame, pairs in sorted(buckets.items()):
+        scores = [p[0] for p in pairs]
+        mean_score = round(sum(scores) / len(scores), 4)
+        best_pair = max(pairs, key=lambda p: p[0])
+        top_box = best_pair[1]
+        timestamp_s = round(float(frame) / float(fps), 3) if fps > 0 else 0.0
+        result.append({
+            "frame": frame,
+            "score": mean_score,
+            "timestamp_s": timestamp_s,
+            "top_face_box": top_box,
+        })
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -377,6 +397,7 @@ def analyse_media(
     frames: Iterable[tuple[int, np.ndarray]] | None,
     boxes_by_frame: dict[int, list[dict[str, int]]] | None,
     media_type: str = "image",
+    fps: float = 0.0,
 ) -> dict[str, Any]:
     """Run the visual deepfake model over detected faces in sampled frames.
 
@@ -389,6 +410,8 @@ def analyse_media(
         per-frame face boxes keyed by frame index (face_processor output).
     media_type :
         ``"image"`` or ``"video"`` (recorded in the response).
+    fps :
+        Video frames per second (for computing accurate timestamps).
 
     Returns
     -------
@@ -423,11 +446,12 @@ def analyse_media(
     }
 
     # 1) Crop every detected face (padded crops from face_processor).
-    candidates: list[tuple[int, np.ndarray]] = []
+    candidates: list[tuple[int, np.ndarray, dict[str, int]]] = []
     for index, frame in frame_list:
         boxes = boxes_by_frame.get(index, []) or []
-        for crop in crop_faces(frame, boxes):
-            candidates.append((index, crop))
+        crops = crop_faces(frame, boxes)
+        for crop, box in zip(crops, boxes):
+            candidates.append((index, crop, box))
 
     if not candidates:
         return {
@@ -459,10 +483,10 @@ def analyse_media(
     skipped_by_cap = len(candidates) - len(selected)
 
     # 4) Per-crop inference — one failing crop never breaks the rest.
-    scored: list[tuple[int, float]] = []
+    scored: list[tuple[int, float, dict[str, int]]] = []
     failed = 0
     last_error = ""
-    for index, crop in selected:
+    for index, crop, box in selected:
         try:
             score = score_face_crop(crop)
         except Exception as exc:  # pragma: no cover — score_face_crop guards
@@ -471,7 +495,7 @@ def analyse_media(
         if score is None:
             failed += 1
         else:
-            scored.append((index, score))
+            scored.append((index, score, box))
 
     if not scored:
         return {
@@ -486,8 +510,8 @@ def analyse_media(
             ),
         }
 
-    scores = [score for _, score in scored]
-    frames_used = len({index for index, _ in scored})
+    scores = [score for _, score, _ in scored]
+    frames_used = len({index for index, _, _ in scored})
     mean_score = sum(scores) / len(scores)
     return {
         **payload,
@@ -499,7 +523,7 @@ def analyse_media(
         "score": round(mean_score, 4),
         "classification": classify(mean_score),
         "per_face_scores": [round(value, 4) for value in scores],
-        "per_frame_scores": _per_frame_means(scored),
+        "per_frame_scores": _per_frame_means(scored, fps=fps),
         "per_frame_note": (
             "mean of per-face scores within each sampled frame; "
             "frame time = frame_index / video fps"

@@ -304,7 +304,10 @@ async def analyze_upload(
     t_v = time.time()
     try:
         visual_analysis = analyse_media(
-            media_frames, face_summary["boxes"], media_type=media_kind
+            media_frames,
+            face_summary["boxes"],
+            media_type=media_kind,
+            fps=video_info.get("fps", 0.0),
         )
         record_latency("visual", (time.time() - t_v) * 1000)
     except Exception as exc:  # defence in depth
