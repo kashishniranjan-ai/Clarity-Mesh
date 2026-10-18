@@ -22,6 +22,7 @@ export default function Header({ onOpenCommandPalette }) {
     { to: '/', label: 'Home', active: homeActive },
     { to: '/#how-it-works', label: 'How It Works', active: howActive },
     { to: '/studio', label: 'Forensic Studio', active: pathname === '/studio', highlight: true },
+    { to: '/live', label: 'Live Stream', active: pathname === '/live' },
     { to: '/dashboard', label: 'Dashboard', active: pathname === '/dashboard' },
     { to: '/cases', label: 'Cases', active: pathname.startsWith('/cases') },
     { to: '/assistant', label: 'AI Analyst', active: pathname === '/assistant' || pathname === '/analyst' },

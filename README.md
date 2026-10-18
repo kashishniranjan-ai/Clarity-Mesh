@@ -229,11 +229,28 @@ The UI is then available at the port Vite prints (usually **http://localhost:517
 - **Detection performance depends on the input and face quality.** Results vary with face size, pose, occlusion, lighting, blur and compression; small, blurred or turned-away faces are harder to judge. If no face is found, the API returns `no_face_detected` and **no verdict** rather than guessing.
 - **It is not a guarantee of authenticity.** A `real` classification does not prove a file is authentic, and a `deepfake` classification does not prove manipulation. Deepfake detection is probabilistic by nature — treat results as estimates, never as forensic evidence.
 
-## Production deployment notes
+## Advanced Features (Industrial Forensic Capabilities)
 
-The application includes local SQLite persistence, Docker deployment, read-only analyst tools, and local benchmark-result visualization. A multi-user public deployment still needs an authentication and authorization layer, managed database/object storage, and operational controls appropriate to its users and jurisdiction. The detector outputs remain research/triage signals and are not validated as forensic proof.
+### Phase 1: Forensic Explainability & Saliency Maps
+- **Grad-CAM Saliency Visualizations**: Extracts heatmaps directly over the final convolutional layer of EfficientNet-B7 with zero external dependencies. Exposes `original_crop_b64`, `heatmap_crop_b64`, and 50% `overlay_b64`.
+- **Explainability API**: `POST /api/explain/visual` supports on-demand analysis by `stored_name` or direct image upload.
+- **Forensic Narrative Generator**: `POST /api/narrative` generates natural-language evidence summaries with strict numeric verification against model outputs.
+- **Command Palette (`⌘K`)**: Instant keyboard navigation across cases, analyses, and forensic views.
 
-Out of scope in this package: blockchain, browser extensions, mobile apps, and real-time webcam/video-call detection.
+### Phase 2: Real-Time Media Stream Forensics & Web Companion
+- **Real-Time WebSocket Forensics (`WS /ws/analyze/stream`)**:
+  - Live video frame streaming via binary JPEG buffers or base64 JSON packets.
+  - Architectural guardrails: hard cap on concurrent streams (`CLARITY_MAX_STREAMS`, default 2), max duration (`CLARITY_STREAM_MAX_DURATION_S`, default 120s), frame cap (`CLARITY_STREAM_MAX_FRAMES`, default 200), and frame subsampling (`CLARITY_STREAM_SAMPLE_INTERVAL`, default 5).
+  - Emits real-time forensic telemetry (`running_mean`, `face_count`, `latency_ms`, face bounding boxes).
+- **Live Stream Forensic HUD (`/live`)**:
+  - Direct webcam integration via `getUserMedia`.
+  - Real-time manipulation probability gauge, facial bounding box canvas overlay, and telemetry sparklines.
+  - Prominent **"EXPERIMENTAL — CPU-THROTTLED"** banner ensuring full operational transparency.
+- **Forensics Web Companion (Browser Extension Scaffold)**:
+  - Located under `extension/`, compliant with Chrome Manifest V3.
+  - Scoped permissions (`activeTab`, `storage`, `contextMenus`) with zero background tracking.
+  - Context menu and popup trigger in-page media inspections, bridging web content with the Clarity Mesh workstation.
+  - Documented client-side inference roadmap for future ONNX Runtime Web integration.
 
 ## Datasets and Model Files
 

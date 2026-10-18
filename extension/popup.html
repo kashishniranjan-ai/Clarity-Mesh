@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Clarity Mesh Forensics</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      width: 340px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #030407;
+      color: #f1f5f9;
+      padding: 16px;
+      font-size: 13px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22d3ee;
+      box-shadow: 0 0 8px #06b6d4;
+    }
+    .brand-title {
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+    }
+    .brand-title span {
+      color: #22d3ee;
+    }
+    .badge {
+      font-family: monospace;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.04);
+      color: #94a3b8;
+    }
+    .status-card {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-family: monospace;
+    }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #94a3b8;
+    }
+    .status-dot.online {
+      background: #34d399;
+      box-shadow: 0 0 6px #10b981;
+    }
+    .status-dot.offline {
+      background: #f87171;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(34, 211, 238, 0.3);
+      background: linear-gradient(135deg, #0284c7 0%, #0891b2 100%);
+      color: #ffffff;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s ease;
+      margin-bottom: 8px;
+      box-shadow: 0 4px 12px rgba(6, 182, 212, 0.2);
+    }
+    .btn:hover {
+      opacity: 0.92;
+      box-shadow: 0 4px 16px rgba(6, 182, 212, 0.35);
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #cbd5e1;
+      box-shadow: none;
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+    }
+    .meta-box {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: #94a3b8;
+      line-height: 1.4;
+      margin-top: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .results-area {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      display: none;
+    }
+    .footer {
+      margin-top: 14px;
+      text-align: center;
+      font-size: 10px;
+      color: #64748b;
+      font-family: monospace;
+    }
+    .footer a {
+      color: #22d3ee;
+      text-decoration: none;
+    }
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">
+      <div class="brand-dot"></div>
+      <div class="brand-title">CLARITY <span>MESH</span></div>
+    </div>
+    <span class="badge">v0.2 FORENSICS</span>
+  </div>
+
+  <div class="status-card">
+    <span style="color: #94a3b8; font-size: 11px;">Local Forensics Engine</span>
+    <div class="status-indicator">
+      <div id="statusDot" class="status-dot"></div>
+      <span id="statusText">Checking…</span>
+    </div>
+  </div>
+
+  <button id="btnScanPage" class="btn">Inspect Media on Active Tab</button>
+  <button id="btnOpenStudio" class="btn btn-secondary">Open Full Workstation</button>
+
+  <div id="resultsArea" class="results-area">
+    <div style="font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #38bdf8; margin-bottom: 4px;">Inspection Results</div>
+    <div id="resultsContent" style="font-size: 12px; color: #e2e8f0;"></div>
+  </div>
+
+  <div class="meta-box">
+    <strong>Privacy Guarantee:</strong> Clarity Mesh processes media strictly upon user command. No continuous background DOM snooping or automated telemetry transmission.
+  </div>
+
+  <div class="footer">
+    Clarity Mesh Forensics · <a href="http://localhost:5173" target="_blank" id="linkWebapp">Launch Web UI</a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

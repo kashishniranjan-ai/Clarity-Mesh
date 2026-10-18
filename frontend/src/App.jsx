@@ -17,6 +17,7 @@ const Reports = lazy(() => import('./pages/Reports'));
 const Evaluation = lazy(() => import('./pages/Evaluation'));
 const Admin = lazy(() => import('./pages/Admin'));
 const Studio = lazy(() => import('./pages/Studio'));
+const LiveDemo = lazy(() => import('./pages/LiveDemo'));
 
 /**
  * Robust ErrorBoundary to guarantee the screen NEVER freezes black.
@@ -142,6 +143,14 @@ function AppShell() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route path="/studio" element={<Studio />} />
+            <Route
+              path="/live"
+              element={
+                <ProtectedRoute>
+                  <LiveDemo />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/admin"
               element={

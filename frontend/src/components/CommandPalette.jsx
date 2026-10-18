@@ -14,6 +14,7 @@ export default function CommandPalette({ isOpen, onClose, onNavigate }) {
   const staticRoutes = [
     { id: 'nav-dashboard', type: 'page', title: 'Dashboard & Analytics', action: () => onNavigate('dashboard') },
     { id: 'nav-analyze', type: 'page', title: 'Media Forensics Lab', action: () => onNavigate('analyze') },
+    { id: 'nav-live', type: 'page', title: 'Live Stream Forensics (Webcam / WS)', action: () => onNavigate('live') },
     { id: 'nav-cases', type: 'page', title: 'Case Management', action: () => onNavigate('cases') },
     { id: 'nav-reports', type: 'page', title: 'Forensic Reporting Studio', action: () => onNavigate('reports') },
     { id: 'nav-assistant', type: 'page', title: 'AI Forensic Analyst', action: () => onNavigate('assistant') },
