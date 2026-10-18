@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Logo from './Logo';
 import { useAuth } from '../context/AuthContext';
 
-export default function Header() {
+export default function Header({ onOpenCommandPalette }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [userDropdown, setUserDropdown] = useState(false);
   const { pathname, hash } = useLocation();
@@ -83,6 +83,18 @@ export default function Header() {
 
         {/* Right Action & Authentication Controls */}
         <div className="hidden items-center gap-3 md:flex">
+          {onOpenCommandPalette && (
+            <button
+              type="button"
+              onClick={onOpenCommandPalette}
+              className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/60 px-2.5 py-1.5 text-xs text-slate-300 hover:text-white hover:border-cyan-500/40 transition-all font-mono shadow-sm"
+              title="Search cases & analyses (Cmd/Ctrl+K)"
+            >
+              <span className="text-cyan-400 font-bold">⌘K</span>
+              <span className="text-[11px] font-sans text-slate-400">Search</span>
+            </button>
+          )}
+
           {user ? (
             <div className="flex items-center gap-2">
               <div className="relative">

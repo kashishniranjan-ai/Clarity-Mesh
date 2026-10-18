@@ -14,13 +14,20 @@
   --color-canvas-border: rgba(255, 255, 255, 0.12);
   --color-canvas-border-bright: rgba(6, 182, 212, 0.4);
 
-  /* High-Contrast Feature Neon Accents */
+  /* High-Contrast Feature Neon Accents & Design Tokens */
   --color-brand-cyan: #06B6D4;
   --color-brand-emerald: #10B981;
   --color-brand-coral: #F43F5E;
   --color-brand-amber: #F59E0B;
   --color-brand-blue: #3B82F6;
   --color-brand-indigo: #6366F1;
+
+  /* Industrial Near-Black Shell & Elevated Panels */
+  --color-shell: #05070A;
+  --color-panel: #0B1220;
+  --color-panel-elevated: #111827;
+  --color-accent-cyan: #0EA5E9;
+  --color-primary-blue: #2563EB;
 
   /* Animations */
   --animate-fade-in: fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;

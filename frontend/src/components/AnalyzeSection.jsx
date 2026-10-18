@@ -4,6 +4,9 @@ import UploadZone from './UploadZone';
 import FilePreview from './FilePreview';
 import FrameTimeline from './FrameTimeline';
 import ProvenanceCard from './ProvenanceCard';
+import HeatmapViewer from './HeatmapViewer';
+import ForensicNarrative from './ForensicNarrative';
+import AnalysisPipeline from './AnalysisPipeline';
 import {
   API_BASE_URL,
   MAX_UPLOAD_SIZE_MB,
@@ -584,7 +587,9 @@ export default function AnalyzeSection() {
   const [status, setStatus] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [result, setResult] = useState(null);
-  const [resultsTab, setResultsTab] = useState('overview'); // 'overview' | 'spectrogram' | 'evidence' | 'radar'
+  const [resultsTab, setResultsTab] = useState('overview'); // 'overview' | 'spectrogram' | 'evidence' | 'radar' | 'explain'
+  const [selectedTimelineFrame, setSelectedTimelineFrame] = useState(null);
+  const [pipelineStage, setPipelineStage] = useState(0);
   const [pdfState, setPdfState] = useState({ busy: false, error: '' });
   const resultRef = useRef(null);
 
@@ -630,8 +635,13 @@ export default function AnalyzeSection() {
     }
 
     setIsUploading(true);
+    setPipelineStage(0);
     setStatus({ type: 'info', text: 'Transmitting media to local multi-spectral forensic pipelines…' });
     setResult(null);
+
+    const stageInterval = setInterval(() => {
+      setPipelineStage((prev) => (prev < 4 ? prev + 1 : prev));
+    }, 1100);
 
     try {
       const payload = await analyzeMedia(target);
@@ -657,6 +667,8 @@ export default function AnalyzeSection() {
       setResult(null);
       setStatus({ type: 'error', text: describeApiError(error) });
     } finally {
+      clearInterval(stageInterval);
+      setPipelineStage(4);
       setIsUploading(false);
     }
   };
@@ -835,11 +847,15 @@ export default function AnalyzeSection() {
                 </div>
               )}
 
+              {/* "Why was this flagged?" Forensic Narrative Panel */}
+              <ForensicNarrative analysisData={result} />
+
               {/* View Switcher Tabs with Cyan Glow */}
               <div className="flex flex-wrap gap-2 border-b border-white/10 pb-3">
                 {[
                   { id: 'overview', label: 'Modality Cards', icon: '📊' },
-                  { id: 'spectrogram', label: 'Multi-Spectral Forensics (ELA / FFT / Noise)', icon: '🔬' },
+                  { id: 'explain', label: 'Explainability & Grad-CAM', icon: '🔬' },
+                  { id: 'spectrogram', label: 'Multi-Spectral Forensics (ELA / FFT / Noise)', icon: '🌊' },
                   { id: 'evidence', label: 'Evidence & Provenance Checklist', icon: '📋' },
                   { id: 'radar', label: 'Forensic Vector Radar', icon: '🌐' },
                 ].map((t) => (
@@ -858,7 +874,7 @@ export default function AnalyzeSection() {
                 ))}
               </div>
 
-{/* Per-frame video score timeline (recharts) with click-to-seek */}
+              {/* Per-frame video score timeline (recharts) with click-to-seek and click-to-explain */}
               {result?.media_type === 'video' &&
                 Array.isArray(visual?.per_frame_scores) &&
                 visual.per_frame_scores.length > 1 && (
@@ -868,6 +884,11 @@ export default function AnalyzeSection() {
                   durationSeconds={result.duration_seconds}
                   threshold={visual.threshold}
                   onSeek={seekPreviewToFrame}
+                  onSelectFrame={(f) => {
+                    setSelectedTimelineFrame(f);
+                    setResultsTab('explain');
+                  }}
+                  selectedFrame={selectedTimelineFrame}
                 />
               )}
 
@@ -910,6 +931,22 @@ export default function AnalyzeSection() {
                       <MultimodalAnalysisBlock multimodal={multimodal} breakdown={ensemble?.signals_breakdown} />
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* TAB: VISUAL EXPLAINABILITY (Grad-CAM & Saliency) */}
+              {resultsTab === 'explain' && (
+                <div className="space-y-6">
+                  <HeatmapViewer
+                    storedName={fileInfo?.saved_as}
+                    analysisId={result?.id}
+                    perFrameScores={visual?.per_frame_scores}
+                    initialFrame={selectedTimelineFrame}
+                    onFrameSelect={(f) => {
+                      setSelectedTimelineFrame(f);
+                      seekPreviewToFrame(f);
+                    }}
+                  />
                 </div>
               )}
 

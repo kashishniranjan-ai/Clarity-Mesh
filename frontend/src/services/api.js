@@ -276,6 +276,31 @@ export async function downloadAnalysisReport(analysisId) {
   return response.blob();
 }
 
+// --- Explainability & Narrative APIs ---
+export const getExplainability = (storedName, method = 'occlusion', frameIndex = null) =>
+  jsonApi('/api/explain', {
+    method: 'POST',
+    body: JSON.stringify({ stored_name: storedName, method, frame_index: frameIndex }),
+  });
+
+export const getVisualExplainability = ({ analysisId, storedName, frameIndex, method = 'gradcam', imageB64 } = {}) =>
+  jsonApi('/api/explain/visual', {
+    method: 'POST',
+    body: JSON.stringify({
+      analysis_id: analysisId,
+      stored_name: storedName,
+      frame_index: frameIndex,
+      method,
+      image_b64: imageB64,
+    }),
+  });
+
+export const getForensicNarrative = (payload) =>
+  jsonApi('/api/v2/narrative', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
 /** GET /api/history — recent stored analyses. */
 export async function getHistory(limit = 50) {
   return jsonApi(`/api/history?limit=${limit}`);

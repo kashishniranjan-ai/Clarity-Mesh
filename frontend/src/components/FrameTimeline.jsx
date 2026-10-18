@@ -24,6 +24,8 @@ export default function FrameTimeline({
   durationSeconds,
   threshold,
   onSeek,
+  onSelectFrame,
+  selectedFrame,
 }) {
   const [hoverPoint, setHoverPoint] = useState(null);
 
@@ -31,8 +33,9 @@ export default function FrameTimeline({
     () =>
       (perFrameScores || []).map((point) => ({
         frame: point.frame,
-        t: fps > 0 ? Number((point.frame / fps).toFixed(3)) : null,
+        t: point.timestamp_s !== undefined ? point.timestamp_s : (fps > 0 ? Number((point.frame / fps).toFixed(3)) : null),
         score: point.score,
+        top_face_box: point.top_face_box,
       })),
     [perFrameScores, fps],
   );
@@ -46,7 +49,10 @@ export default function FrameTimeline({
   ).length;
 
   const handleChartClick = () => {
-    if (hoverPoint && onSeek) onSeek(hoverPoint.frame);
+    if (hoverPoint) {
+      if (onSeek) onSeek(hoverPoint.frame);
+      if (onSelectFrame) onSelectFrame(hoverPoint.frame);
+    }
   };
 
   const tickFormatter = (value) =>
@@ -55,9 +61,9 @@ export default function FrameTimeline({
   const tooltipLabel = (payload) => {
     const point = payload?.[0]?.payload;
     if (!point) return '';
-    return useTime
-      ? `Frame ${point.frame} · ${point.t}s`
-      : `Frame ${point.frame}`;
+    const timeStr = point.t !== null ? ` · ${point.t}s` : '';
+    const boxStr = point.top_face_box ? ` · Box: ${point.top_face_box.width}x${point.top_face_box.height}` : '';
+    return `Frame ${point.frame}${timeStr}${boxStr}`;
   };
 
   return (

@@ -1,9 +1,10 @@
-import React, { Suspense, lazy, useEffect } from 'react';
-import { Route, Routes, useLocation, Navigate } from 'react-router-dom';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
+import { Route, Routes, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import Login from './pages/Login';
 import ProtectedRoute from './components/ProtectedRoute';
+import CommandPalette from './components/CommandPalette';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { clearStoredAuth } from './services/api';
 
@@ -97,6 +98,8 @@ function ScrollManager() {
 function AppShell() {
   const { user, loading } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [cmdOpen, setCmdOpen] = useState(false);
 
   if (loading) {
     return (
@@ -115,7 +118,14 @@ function AppShell() {
   return (
     <div className="flex min-h-screen flex-col bg-[#030407]">
       <ScrollManager />
-      <Header />
+      <CommandPalette
+        isOpen={cmdOpen}
+        onClose={() => setCmdOpen(false)}
+        onNavigate={(dest) => {
+          navigate(dest === 'home' || dest === 'analyze' ? '/' : `/${dest}`);
+        }}
+      />
+      <Header onOpenCommandPalette={() => setCmdOpen(true)} />
       <main className="flex-1">
         <Suspense
           fallback={
