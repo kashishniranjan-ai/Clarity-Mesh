@@ -28,6 +28,7 @@ Clarity Mesh analyzes images, videos, and audio and estimates whether media may 
 | STEP 15 | Read-only AI research agent (`/assistant`) using the OpenAI Responses API and constrained history tools, with a no-key local fallback |
 | STEP 16 | Reporting studio (`/reports`) with 7/30/90-day activity views and JSON, CSV, and print-to-PDF exports |
 | STEP 17 | Model evaluation lab (`/evaluation`) imports benchmark JSON/CSV locally and visualizes confusion matrices, precision, recall, F1, and coverage |
+| PHASE 1 | **Explainability & Forensic UI:** Grad-CAM + Occlusion saliency heatmaps with blended overlay & peak regions (`POST /api/explain/visual`), per-frame timeline timestamps & bounding boxes, deterministic & LLM-verified forensic narrative generator (`POST /api/v2/narrative`), interactive HeatmapViewer, and Cmd/Ctrl+K command palette |
 
 ## Technology Stack
 
@@ -143,7 +144,9 @@ The backend serves on **`http://127.0.0.1:8000`** (all routes under `/api`):
 | `POST` | `/api/cases/{id}/analyses/{analysis_id}` | Link a stored analysis to a case. |
 | `DELETE` | `/api/cases/{id}` | Delete a case; analysis history remains intact. |
 | `GET` | `/api/assistant/status` | Report whether the AI provider is configured (never returns secrets). |
-| `POST` | `/api/assistant/chat` | Chat with the read-only analyst agent using sanitized local history tools. |
+| `POST` | `/api/explain` | Saliency explainability heatmap for stored upload (occlusion or gradcam). |
+| `POST` | `/api/explain/visual` | Targeted visual explainability: accepts stored_name, analysis_id, frame_index, or direct image upload. Returns base64 original face crop, heatmap crop, blended overlay (50%), and localized peak activation regions. |
+| `POST` | `/api/v2/narrative` | Structured-to-human forensic narrative generator: converts detector outputs, flags, and peak saliency regions into a cohesive report paragraph with strict number verification (OpenAI or deterministic template). |
 | `DELETE` | `/api/history` | Purge all stored analysis records from the local SQLite store. |
 
 ## Analyst Workspace and Deployment
