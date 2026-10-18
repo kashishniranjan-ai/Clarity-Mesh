@@ -68,7 +68,46 @@ def history_db(tmp_path, monkeypatch):
     """
     db_path = tmp_path / "history_test.db"
     monkeypatch.setenv("CLARITY_HISTORY_DB", str(db_path))
+    monkeypatch.setenv("CLARITY_RATE_LIMIT_ENABLED", "false")
+    from services.auth_store import init_auth_db
+    from services.audit_store import init_audit_db
+    init_auth_db()
+    init_audit_db()
     return db_path
+
+
+@pytest.fixture(autouse=True)
+def auth_test_override(request):
+    """
+    Automatically mock authentication dependencies for regression test suites.
+    Tests marked with @pytest.mark.no_auth_override will skip this override
+    to test real JWT authentication, lockout, and RBAC rules.
+    """
+    from main import app
+    from services.auth_deps import get_current_user, require_admin
+
+    if "no_auth_override" in request.keywords:
+        yield
+        return
+
+    test_admin_user = {
+        "id": "usr_test_admin_01",
+        "email": "admin@claritymesh.ai",
+        "name": "Test Root Admin",
+        "role": "admin",
+        "clearance": "Tier 4 — SecOps Root Commander",
+        "department": "Autonomous Threat Interception & Defense",
+        "avatar": "https://example.com/avatar.jpg",
+        "locked_until": 0.0,
+    }
+
+    app.dependency_overrides[get_current_user] = lambda: test_admin_user
+    app.dependency_overrides[require_admin] = lambda: test_admin_user
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(require_admin, None)
 
 
 @pytest.fixture

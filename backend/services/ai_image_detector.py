@@ -640,23 +640,6 @@ def analyse_ai_image(
 
     model, head, error = _load_models()
     if model is None or head is None:
-        # Fallback to high-precision spatial-spectral AI generation analysis
-        first_frame = frame_list[0][1] if frame_list else None
-        if first_frame is not None:
-            score, family = _compute_spatial_spectral_ai_score(first_frame)
-            return {
-                **payload,
-                "status": "completed",
-                "images_analyzed": 1,
-                "score": round(score, 4),
-                "classification": classify(score),
-                "generator_family": family,
-                "fallback_probe": True,
-                "message": (
-                    f"Analyzed full image via Spatial-Spectral AI Probe. "
-                    f"Frequency lattice analysis indicates {family}."
-                ),
-            }
         return {
             **payload,
             "status": "model_unavailable",

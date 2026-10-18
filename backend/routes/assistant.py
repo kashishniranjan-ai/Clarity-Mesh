@@ -8,14 +8,14 @@ import urllib.error
 import urllib.request
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from services.analytics import build_dashboard
-from services.history_store import get_analysis, list_analyses
+from services.auth_deps import get_current_user
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 SYSTEM_INSTRUCTIONS = """You are Clarity Mesh's media-forensics research analyst. Use the provided read-only functions when a question needs current records or aggregate metrics. Never claim that a model score proves authenticity or deception. Scores are uncalibrated detector outputs. Distinguish observed data from hypotheses, say when the history is empty or incomplete, and cite record IDs when referencing individual analyses. Do not request or expose original media, filenames, local paths, secrets, or private data. Never invent detector results. The available functions only read sanitized metadata and scores."""
 

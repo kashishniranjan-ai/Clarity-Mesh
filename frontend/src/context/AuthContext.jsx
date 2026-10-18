@@ -1,100 +1,116 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import { getAuthMe, loginUser, logoutUser, registerUser } from '../services/api';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { getAuthMe, loginUser, logoutUser, registerUser, clearStoredAuth, getStoredToken } from '../services/api';
 
 const AuthContext = createContext(null);
 
-// Wipe any legacy persistent localStorage session to guarantee mandatory login entry
-try {
-  localStorage.removeItem('cm_user');
-  localStorage.removeItem('cm_token');
-} catch (e) {
-  // Ignore in non-browser env
-}
-
 export function AuthProvider({ children }) {
-  // Session is strictly scoped to the active browser tab/session
   const [user, setUser] = useState(() => {
     try {
-      const stored = sessionStorage.getItem('cm_user');
+      const stored = sessionStorage.getItem('cm_user') || localStorage.getItem('cm_user');
       return stored ? JSON.parse(stored) : null;
     } catch {
       return null;
     }
   });
-  const [token, setToken] = useState(() => {
-    try {
-      return sessionStorage.getItem('cm_token') || null;
-    } catch {
-      return null;
-    }
-  });
+
+  const [token, setToken] = useState(() => getStoredToken());
   const [loading, setLoading] = useState(false);
 
-  // When token exists in current session, verify it
+  // Global listener for 401 Unauthorized events from api.js
+  const handleUnauthorized = useCallback(() => {
+    setUser(null);
+    setToken(null);
+    clearStoredAuth();
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('cm_auth_unauthorized', handleUnauthorized);
+    return () => {
+      window.removeEventListener('cm_auth_unauthorized', handleUnauthorized);
+    };
+  }, [handleUnauthorized]);
+
+  // Session verification on mount/token change
   useEffect(() => {
     if (!token) {
       setUser(null);
       return;
     }
 
+    let isMounted = true;
     async function verifySession() {
       try {
         const res = await getAuthMe();
-        if (res?.authenticated && res?.user) {
-          setUser(res.user);
-          sessionStorage.setItem('cm_user', JSON.stringify(res.user));
-        } else {
-          // Token expired or invalid
-          setUser(null);
-          setToken(null);
-          sessionStorage.removeItem('cm_token');
-          sessionStorage.removeItem('cm_user');
+        if (isMounted) {
+          if (res?.authenticated && res?.user) {
+            setUser(res.user);
+            sessionStorage.setItem('cm_user', JSON.stringify(res.user));
+          } else {
+            handleUnauthorized();
+          }
         }
-      } catch (err) {
-        console.warn('Session verification fallback:', err);
+      } catch {
+        // If server is unreachable, retain cached session for offline resilience
       }
     }
     verifySession();
-  }, [token]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [token, handleUnauthorized]);
 
   const login = async (email, password, roleRequested = 'analyst') => {
-    const res = await loginUser({ email, password, role_requested: roleRequested });
-    if (res?.token && res?.user) {
-      setToken(res.token);
-      setUser(res.user);
-      sessionStorage.setItem('cm_token', res.token);
-      sessionStorage.setItem('cm_user', JSON.stringify(res.user));
-      return res.user;
+    setLoading(true);
+    try {
+      const res = await loginUser({ email, password, role_requested: roleRequested });
+      const authToken = res?.access_token || res?.token;
+      if (authToken && res?.user) {
+        setToken(authToken);
+        setUser(res.user);
+        sessionStorage.setItem('cm_token', authToken);
+        sessionStorage.setItem('cm_user', JSON.stringify(res.user));
+        if (res.refresh_token) {
+          sessionStorage.setItem('cm_refresh_token', res.refresh_token);
+        }
+        return res.user;
+      }
+      throw new Error('Authentication failed: Missing access token in handshake.');
+    } finally {
+      setLoading(false);
     }
-    throw new Error('Login failed: Token missing.');
   };
 
   const register = async (name, email, password, role = 'analyst') => {
-    const res = await registerUser({ name, email, password, role });
-    if (res?.token && res?.user) {
-      setToken(res.token);
-      setUser(res.user);
-      sessionStorage.setItem('cm_token', res.token);
-      sessionStorage.setItem('cm_user', JSON.stringify(res.user));
-      return res.user;
+    setLoading(true);
+    try {
+      const res = await registerUser({ name, email, password, role });
+      const authToken = res?.access_token || res?.token;
+      if (authToken && res?.user) {
+        setToken(authToken);
+        setUser(res.user);
+        sessionStorage.setItem('cm_token', authToken);
+        sessionStorage.setItem('cm_user', JSON.stringify(res.user));
+        if (res.refresh_token) {
+          sessionStorage.setItem('cm_refresh_token', res.refresh_token);
+        }
+        return res.user;
+      }
+      throw new Error('Registration failed: Verification payload incomplete.');
+    } finally {
+      setLoading(false);
     }
-    throw new Error('Registration failed.');
   };
 
   const logout = async () => {
     try {
       await logoutUser();
-    } catch (e) {
+    } catch {
       // Ignore network errors on logout
     } finally {
       setUser(null);
       setToken(null);
-      sessionStorage.removeItem('cm_token');
-      sessionStorage.removeItem('cm_user');
-      try {
-        localStorage.removeItem('cm_token');
-        localStorage.removeItem('cm_user');
-      } catch {}
+      clearStoredAuth();
     }
   };
 

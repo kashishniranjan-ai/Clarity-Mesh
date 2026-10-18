@@ -3,7 +3,9 @@ import { Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import Login from './pages/Login';
+import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { clearStoredAuth } from './services/api';
 
 const Home = lazy(() => import('./pages/Home'));
 const History = lazy(() => import('./pages/History'));
@@ -44,10 +46,7 @@ class ErrorBoundary extends React.Component {
             <button
               type="button"
               onClick={() => {
-                try {
-                  sessionStorage.clear();
-                  localStorage.clear();
-                } catch {}
+                clearStoredAuth();
                 window.location.href = '/';
               }}
               className="btn-glossy-primary px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-cyan-500/25"
@@ -112,7 +111,7 @@ function AppShell() {
     return <Login />;
   }
 
-  // Authenticated: Render full website experience
+  // Authenticated: Render full website experience with role-guarded routes
   return (
     <div className="flex min-h-screen flex-col bg-[#030407]">
       <ScrollManager />
@@ -133,15 +132,78 @@ function AppShell() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route path="/studio" element={<Studio />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/history" element={<History />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/analyst" element={<Assistant />} />
-            <Route path="/assistant" element={<Assistant />} />
-            <Route path="/cases" element={<Cases />} />
-            <Route path="/cases/:caseId" element={<Cases />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/evaluation" element={<Evaluation />} />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute requireAdmin={true}>
+                  <Admin />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/history"
+              element={
+                <ProtectedRoute>
+                  <History />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/analyst"
+              element={
+                <ProtectedRoute>
+                  <Assistant />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/assistant"
+              element={
+                <ProtectedRoute>
+                  <Assistant />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/cases"
+              element={
+                <ProtectedRoute>
+                  <Cases />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/cases/:caseId"
+              element={
+                <ProtectedRoute>
+                  <Cases />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/reports"
+              element={
+                <ProtectedRoute>
+                  <Reports />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/evaluation"
+              element={
+                <ProtectedRoute>
+                  <Evaluation />
+                </ProtectedRoute>
+              }
+            />
             <Route path="*" element={<Home />} />
           </Routes>
         </Suspense>

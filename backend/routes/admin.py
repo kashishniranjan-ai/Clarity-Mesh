@@ -1,25 +1,26 @@
 """
 Clarity Mesh — Administrator Command Center API
 ===============================================
-Endpoints for Root Administrators to monitor system telemetry, global threat radar,
-investigator access control, and live model threshold calibration.
+Endpoints for Root Administrators to monitor live system telemetry,
+audit forensics trails, manage investigator clearances, and calibrate
+multi-signal model thresholds.
 """
 
 from __future__ import annotations
 
-import os
-import platform
 import time
 from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
-from fastapi import APIRouter, HTTPException
 
+from services.audit_store import list_audit_logs, log_audit_event
+from services.auth_deps import get_client_ip, require_admin
+from services.auth_store import list_users, update_user_role
 from services.forensic_engine import get_forensic_config, update_forensic_config
-from routes.auth import USERS_DB
+from services.telemetry_service import get_real_system_telemetry
 
-router = APIRouter()
-
-START_TIME = time.time()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 class CalibrationUpdateRequest(BaseModel):
@@ -36,6 +37,10 @@ class CalibrationUpdateRequest(BaseModel):
     steepness_factor: float | None = None
 
 
+class RoleUpdateRequest(BaseModel):
+    role: str  # "admin" or "analyst"
+
+
 @router.get("/config")
 async def get_config():
     """Get active forensic threshold configuration."""
@@ -46,10 +51,29 @@ async def get_config():
 
 
 @router.post("/calibrate")
-async def calibrate_engine(req: CalibrationUpdateRequest):
+async def calibrate_engine(
+    req: CalibrationUpdateRequest,
+    request: Request,
+    current_admin: dict[str, Any] = Depends(require_admin),
+):
     """Update active weights and decision thresholds dynamically."""
-    updates = {k: v for k, v in req.dict().items() if v is not None}
+    # Pydantic v2 model_dump with fallback
+    updates = (
+        req.model_dump(exclude_unset=True)
+        if hasattr(req, "model_dump")
+        else {k: v for k, v in req.dict().items() if v is not None}
+    )
+
     new_cfg = update_forensic_config(updates)
+
+    log_audit_event(
+        action="CALIBRATION_UPDATE",
+        user=current_admin,
+        target="forensic_engine",
+        ip_address=get_client_ip(request),
+        details=updates,
+    )
+
     return {
         "status": "success",
         "message": f"Updated {len(updates)} forensic engine calibration parameter(s).",
@@ -60,71 +84,70 @@ async def calibrate_engine(req: CalibrationUpdateRequest):
 @router.get("/telemetry")
 async def get_telemetry():
     """Real-time system diagnostics, resource utilization, and model cache vitals."""
-    uptime_seconds = int(time.time() - START_TIME)
-    days = uptime_seconds // 86400
-    hours = (uptime_seconds % 86400) // 3600
-    minutes = (uptime_seconds % 3600) // 60
-    seconds = uptime_seconds % 60
-    uptime_str = f"{days}d {hours:02d}h {minutes:02d}m {seconds:02d}s"
+    telemetry = get_real_system_telemetry()
+    return telemetry
 
+
+@router.get("/audit")
+async def get_audit_trail(
+    limit: int = Query(100, ge=1, le=500),
+    action: str | None = Query(None),
+):
+    """Retrieve immutable forensic audit logs."""
+    logs = list_audit_logs(limit=limit, action=action)
     return {
-        "status": "online",
-        "service": "Clarity Mesh Neural Forensics Core",
-        "uptime": uptime_str,
-        "uptime_seconds": uptime_seconds,
-        "system": {
-            "os": f"{platform.system()} {platform.release()}",
-            "arch": platform.machine(),
-            "python_version": platform.python_version(),
-            "cpu_utilization_pct": 14.8,
-            "memory_allocated_mb": 1180.5,
-            "memory_available_mb": 16384.0,
-            "gpu_acceleration": "DirectML / TorchScript CPU Cores Active",
-        },
-        "models": [
-            {
-                "name": "EfficientNet-B7 DFDC Visual Classifier",
-                "status": "LOADED",
-                "format": "TorchScript .pt",
-                "memory_mb": 270.4,
-                "latency_avg_ms": 134,
-                "domain": "Facial Biometric Manipulation",
-            },
-            {
-                "name": "wav2vec2-small Anti-Deepfake Acoustic Core",
-                "status": "LOADED",
-                "format": "SafeTensors HuggingFace",
-                "memory_mb": 358.2,
-                "latency_avg_ms": 112,
-                "domain": "Audio Voice Cloning / Synthesis",
-            },
-            {
-                "name": "UniversalFakeDetect CLIP ViT-L/14 Semantic Probe",
-                "status": "STANDBY / CACHED",
-                "format": "PyTorch Linear Probe",
-                "memory_mb": 1620.0,
-                "latency_avg_ms": 280,
-                "domain": "Whole-Image Generative AI Detection",
-            },
-            {
-                "name": "Multi-Spectral Fourier & ELA Forensic Engine",
-                "status": "LOADED",
-                "format": "Native C++ / OpenCV Accelerated",
-                "memory_mb": 38.0,
-                "latency_avg_ms": 24,
-                "domain": "Frequency & Spatial Residual Analysis",
-            },
-        ],
-        "queue_depth": 0,
-        "active_threads": 4,
+        "status": "success",
+        "total": len(logs),
+        "audit_logs": logs,
     }
+
+
+@router.get("/users")
+async def get_users():
+    """List registered forensic investigators and clearance levels."""
+    users_list = list_users()
+    return {
+        "status": "success",
+        "investigators": users_list,
+    }
+
+
+@router.patch("/users/{user_id}/role")
+async def change_user_role(
+    user_id: str,
+    req: RoleUpdateRequest,
+    request: Request,
+    current_admin: dict[str, Any] = Depends(require_admin),
+):
+    """Promote or demote an investigator's role (Admin only)."""
+    try:
+        updated = update_user_role(user_id, req.role)
+        log_audit_event(
+            action="USER_ROLE_UPDATED",
+            user=current_admin,
+            target=user_id,
+            ip_address=get_client_ip(request),
+            details={"new_role": req.role, "target_user": user_id},
+        )
+        return {
+            "status": "success",
+            "message": f"User {user_id} role updated to {req.role}.",
+            "user": updated,
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("/threat-matrix")
 async def get_threat_matrix():
-    """Global simulated cyber threat radar & deepfake interception stream."""
+    """Simulated cyber threat radar & deepfake interception stream (Labeled demo data)."""
     return {
         "status": "success",
+        "is_simulated": True,
+        "disclaimer": "Simulated demo data — threat intelligence feed is simulated for cyber-forensics demonstration.",
         "active_threat_level": "ELEVATED",
         "global_attacks_blocked_24h": 1428,
         "incident_feed": [
@@ -137,6 +160,7 @@ async def get_threat_matrix():
                 "confidence": 99.8,
                 "status": "INTERCEPTED",
                 "severity": "CRITICAL",
+                "simulation_label": "Simulated demo data",
             },
             {
                 "id": "INC-8901",
@@ -147,6 +171,7 @@ async def get_threat_matrix():
                 "confidence": 97.4,
                 "status": "FLAGGED",
                 "severity": "HIGH",
+                "simulation_label": "Simulated demo data",
             },
             {
                 "id": "INC-8900",
@@ -157,6 +182,7 @@ async def get_threat_matrix():
                 "confidence": 99.1,
                 "status": "QUARANTINED",
                 "severity": "HIGH",
+                "simulation_label": "Simulated demo data",
             },
             {
                 "id": "INC-8899",
@@ -167,6 +193,7 @@ async def get_threat_matrix():
                 "confidence": 94.6,
                 "status": "RESOLVED",
                 "severity": "MEDIUM",
+                "simulation_label": "Simulated demo data",
             },
         ],
         "attack_vector_distribution": {
@@ -175,26 +202,4 @@ async def get_threat_matrix():
             "Diffusion Image Synthesis": 22,
             "Biometric Spoof / Splicing": 6,
         },
-    }
-
-
-@router.get("/users")
-async def get_users():
-    """List registered forensic investigators and clearance levels."""
-    users_list = []
-    for u in USERS_DB.values():
-        users_list.append({
-            "id": u["id"],
-            "email": u["email"],
-            "name": u["name"],
-            "role": u["role"],
-            "clearance": u["clearance"],
-            "department": u["department"],
-            "avatar": u["avatar"],
-            "created_at": u["created_at"],
-            "status": "ACTIVE",
-        })
-    return {
-        "status": "success",
-        "investigators": users_list,
     }

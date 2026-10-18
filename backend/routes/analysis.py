@@ -15,8 +15,9 @@ import os
 import uuid
 import time
 from pathlib import Path
+from typing import Any
 
-from fastapi import APIRouter, File, UploadFile, HTTPException
+from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Request
 
 from services.audio_detector import analyse_audio_media
 from services.face_processor import analyse_frames
@@ -37,6 +38,10 @@ from services.forensic_engine import (
     perform_fft_spectral_analysis,
     perform_noise_and_texture_analysis,
 )
+from services.auth_deps import get_client_ip, get_current_user
+from services.audit_store import log_audit_event
+from services.telemetry_service import record_latency
+from services.rate_limit import limiter
 
 router = APIRouter()
 
@@ -123,7 +128,12 @@ def _safe_filename(original: str) -> str:
 # POST /api/analyze — Upload media for analysis
 # ---------------------------------------------------------------------------
 @router.post("/analyze")
-async def analyze_upload(file: UploadFile = File(...)):
+@limiter.limit("30/minute")
+async def analyze_upload(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     """
     Accept an uploaded image or video file, validate it, save it to the
     uploads directory, inspect/preprocess it, and return metadata.
@@ -290,10 +300,12 @@ async def analyze_upload(file: UploadFile = File(...)):
     # model_unavailable / inference_failed — and a "score" exists ONLY
     # when at least one forward pass genuinely succeeded. This call must
     # never crash the API: any unexpected error becomes a status instead.
+    t_v = time.time()
     try:
         visual_analysis = analyse_media(
             media_frames, face_summary["boxes"], media_type=media_kind
         )
+        record_latency("visual", (time.time() - t_v) * 1000)
     except Exception as exc:  # defence in depth
         visual_analysis = {
             "status": "inference_failed",
@@ -335,8 +347,10 @@ async def analyze_upload(file: UploadFile = File(...)):
     # model_unavailable / inference_failed — and "score" exists ONLY after
     # genuine forward passes. This raw block is kept untouched; the STEP 8
     # fusion below reads it but never modifies or hides it.
+    t_a = time.time()
     try:
         audio_analysis = analyse_audio_media(save_path, media_type=media_kind)
+        record_latency("audio", (time.time() - t_a) * 1000)
     except Exception as exc:  # defence in depth
         audio_analysis = {
             "status": "inference_failed",
@@ -357,8 +371,10 @@ async def analyze_upload(file: UploadFile = File(...)):
     # model_unavailable / inference_failed — "score" exists ONLY after a
     # genuine forward pass, and it is UNCALIBRATED (higher = more likely
     # AI-generated), never a guaranteed probability.
+    t_ai = time.time()
     try:
         ai_image_analysis = analyse_ai_image(media_frames, media_type=media_kind)
+        record_latency("ai_image", (time.time() - t_ai) * 1000)
     except Exception as exc:  # defence in depth
         ai_image_analysis = {
             "status": "inference_failed",
@@ -398,12 +414,14 @@ async def analyze_upload(file: UploadFile = File(...)):
     ela_result = None
     fft_result = None
     noise_result = None
+    t_f = time.time()
     try:
         if media_frames and len(media_frames) > 0 and media_frames[0][1] is not None:
             first_frame = media_frames[0][1]
             ela_result = perform_ela(first_frame)
             fft_result = perform_fft_spectral_analysis(first_frame)
             noise_result = perform_noise_and_texture_analysis(first_frame)
+            record_latency("forensics", (time.time() - t_f) * 1000)
     except Exception as exc:
         pass
 
@@ -489,5 +507,20 @@ async def analyze_upload(file: UploadFile = File(...)):
     # save_analysis never raises and returns None on failure — a history
     # problem must never break or delay the analysis response contract.
     save_analysis(response)
+
+    log_audit_event(
+        action="ANALYZE_MEDIA",
+        user=current_user,
+        target=file.filename or safe_name,
+        ip_address=get_client_ip(request),
+        details={
+            "media_type": media_kind,
+            "size_bytes": file_size,
+            "visual_score": visual_analysis.get("score"),
+            "audio_score": audio_analysis.get("score"),
+            "multimodal_status": multimodal_analysis.get("status"),
+            "fused_score": multimodal_analysis.get("fused_fake_score"),
+        },
+    )
 
     return response
