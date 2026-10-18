@@ -7,6 +7,7 @@ enforce role-based access control (RBAC), and reject unverified requests.
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
@@ -17,13 +18,20 @@ from services.jwt_service import TokenExpiredError, TokenInvalidError, decode_to
 
 
 def get_client_ip(request: Request) -> str:
-    """Extract real client IP address respecting reverse proxies."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip.strip()
+    """Extract real client IP address.
+
+    Proxy headers (X-Forwarded-For / X-Real-IP) are only honored when the
+    deployment explicitly opts in via CLARITY_TRUST_PROXY=true (i.e. the app
+    is behind nginx/compose which sets them). Otherwise the direct peer
+    address is used, so a client cannot spoof its audit IP.
+    """
+    if os.getenv("CLARITY_TRUST_PROXY", "false").lower() == "true":
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
+            return real_ip.strip()
     return request.client.host if request.client else "127.0.0.1"
 
 

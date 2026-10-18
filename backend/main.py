@@ -32,18 +32,42 @@ from routes.explain import router as explain_router
 from routes.history import router as history_router
 from routes.reports import router as reports_router
 from services.audit_store import init_audit_db
+from services.auth_deps import get_current_user, require_admin
 from services.auth_store import init_auth_db, seed_admin
 from services.history_store import HistoryStoreError, init_db
 from services.jwt_service import create_access_token, create_refresh_token
 from services.rate_limit import limiter
-from services.auth_deps import get_current_user, require_admin
 
 # ---------------------------------------------------------------------------
 # Application Lifespan
 # ---------------------------------------------------------------------------
+def _warn_on_insecure_startup() -> None:
+    """Fail-closed startup guard for the JWT signing secret.
+
+    Development/test runs fall back to an ephemeral per-process secret
+    (tokens invalidate on restart). Production (CLARITY_ENV=production)
+    refuses to boot without a strong secret so a misconfigured deploy
+    can never sign tokens with a weak/ephemeral key.
+    """
+    from services.jwt_service import is_using_default_secret
+
+    env = os.getenv("CLARITY_ENV", "development").strip().lower()
+    if is_using_default_secret():
+        if env == "production":
+            raise RuntimeError(
+                "Refusing to start: CLARITY_JWT_SECRET (>=32 chars) must be "
+                "set when CLARITY_ENV=production."
+            )
+        print(
+            "[security] CLARITY_JWT_SECRET not set — ephemeral dev secret "
+            "in use (set CLARITY_ENV=production to enforce a real secret)."
+        )
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Initialise SQLite schemas on startup (history, users, audit log)."""
+    _warn_on_insecure_startup()
     try:
         init_db()
     except HistoryStoreError as exc:
@@ -82,6 +106,21 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ---------------------------------------------------------------------------
+# Security Headers Middleware
+# ---------------------------------------------------------------------------
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    # HSTS only makes sense behind TLS; harmless to send, browsers ignore on http.
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
+# ---------------------------------------------------------------------------
 # Server-Side Upload Size Limit Middleware (50 MB)
 # ---------------------------------------------------------------------------
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
@@ -103,6 +142,7 @@ async def limit_upload_size(request: Request, call_next):
 
 # ---------------------------------------------------------------------------
 # CORS — allow configured origins from env or default dev ports
+# Explicit methods/headers (never "*" with credentials).
 # ---------------------------------------------------------------------------
 cors_env = os.getenv("CLARITY_CORS_ORIGINS", "")
 if cors_env.strip():
@@ -122,8 +162,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
+    max_age=600,
 )
 
 # ---------------------------------------------------------------------------

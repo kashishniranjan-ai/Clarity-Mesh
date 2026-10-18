@@ -5,6 +5,11 @@ services:
     restart: unless-stopped
     environment:
       CLARITY_HISTORY_DB: /app/backend/data/history.db
+      CLARITY_TRUST_PROXY: "true"
+      CLARITY_JWT_SECRET: ${CLARITY_JWT_SECRET:?set a random CLARITY_JWT_SECRET in your .env}
+      CLARITY_CORS_ORIGINS: ${CLARITY_CORS_ORIGINS:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       HF_HOME: /home/mesh/.cache/huggingface
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-astra}

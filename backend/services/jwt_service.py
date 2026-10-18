@@ -8,14 +8,57 @@ refresh lifetimes, cryptographically bound user roles, and revocation checks.
 from __future__ import annotations
 
 import os
+import secrets
 import time
 from typing import Any
 
 import jwt
 
-JWT_SECRET_KEY = os.getenv(
-    "CLARITY_JWT_SECRET", "clarity-mesh-forensics-super-secret-jwt-key-2026"
-)
+# Ephemeral per-process fallback: restart invalidates dev tokens.
+# Production MUST set CLARITY_JWT_SECRET (>=32 chars); compose enforces it.
+_EPHEMERAL_DEV_SECRET = secrets.token_hex(32)
+
+_warn_once = False
+
+
+def _resolve_secret() -> str:
+    """Resolve the HS256 signing secret at call time (test-friendly).
+
+    A ``CLARITY_JWT_SECRET`` shorter than 32 chars is treated as
+    misconfigured and ignored (ephemeral fallback + warning) so a weak
+    committed secret can never silently sign production tokens.
+    """
+    global _warn_once
+    raw = os.getenv("CLARITY_JWT_SECRET", "").strip()
+    if raw and len(raw) < 32:
+        raw = ""
+        if not _warn_once:
+            _warn_once = True
+            print(
+                "[security] CLARITY_JWT_SECRET is shorter than 32 chars — "
+                "ignoring it and using an ephemeral per-process secret. "
+                "Set a random >=32-char secret."
+            )
+    secret = raw or _EPHEMERAL_DEV_SECRET
+    if secret == _EPHEMERAL_DEV_SECRET and not _warn_once:
+        _warn_once = True
+        print(
+            "[security] CLARITY_JWT_SECRET is not set — using an ephemeral "
+            "per-process secret (tokens invalidate on restart). Set a random "
+            ">=32-char secret in production."
+        )
+    return secret
+
+
+def get_jwt_secret() -> str:
+    """Public accessor for startup checks and operational tooling."""
+    return _resolve_secret()
+
+
+def is_using_default_secret() -> bool:
+    return _resolve_secret() == _EPHEMERAL_DEV_SECRET
+
+
 JWT_ALGORITHM = "HS256"
 
 # Token Lifetimes
@@ -52,7 +95,7 @@ def create_access_token(user: dict[str, Any]) -> str:
         "iat": int(now),
         "exp": int(now + ACCESS_TOKEN_LIFETIME_SECONDS),
     }
-    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return jwt.encode(payload, _resolve_secret(), algorithm=JWT_ALGORITHM)
 
 
 def create_refresh_token(user: dict[str, Any]) -> str:
@@ -65,7 +108,7 @@ def create_refresh_token(user: dict[str, Any]) -> str:
         "iat": int(now),
         "exp": int(now + REFRESH_TOKEN_LIFETIME_SECONDS),
     }
-    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return jwt.encode(payload, _resolve_secret(), algorithm=JWT_ALGORITHM)
 
 
 def decode_token(token: str) -> dict[str, Any]:
@@ -73,7 +116,7 @@ def decode_token(token: str) -> dict[str, Any]:
     try:
         payload = jwt.decode(
             token,
-            JWT_SECRET_KEY,
+            _resolve_secret(),
             algorithms=[JWT_ALGORITHM],
             options={"require": ["exp", "iat", "sub", "type"]},
         )

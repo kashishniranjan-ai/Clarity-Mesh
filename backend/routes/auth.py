@@ -6,10 +6,10 @@ and role-based clearance for Forensics Analysts and Root Administrators.
 """
 
 import time
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Request, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, Field
 
 from services.audit_store import log_audit_event
 from services.auth_deps import get_client_ip, get_current_user
@@ -33,20 +33,20 @@ router = APIRouter()
 
 
 class LoginRequest(BaseModel):
-    email: str
-    password: str
-    role_requested: str = "analyst"  # "analyst" or "admin"
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=256)
+    role_requested: Literal["analyst", "admin"] = "analyst"
 
 
 class RegisterRequest(BaseModel):
-    email: str
-    name: str
-    password: str
-    role: str = "analyst"
+    email: str = Field(min_length=3, max_length=254)
+    name: str = Field(min_length=1, max_length=120)
+    password: str = Field(min_length=8, max_length=256)
+    role: str = Field(default="analyst", max_length=20)
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    refresh_token: str = Field(min_length=10, max_length=4096)
 
 
 @router.post("/login")
@@ -173,6 +173,7 @@ async def register(req: RegisterRequest, request: Request):
 
 
 @router.post("/refresh")
+@limiter.limit("20/minute")
 async def refresh_token(req: RefreshRequest, request: Request):
     ip = get_client_ip(request)
     try:

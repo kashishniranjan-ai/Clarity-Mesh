@@ -162,7 +162,11 @@ def create_user(
     role: str = "analyst",
 ) -> dict[str, Any]:
     """Create a new user. Always defaults role to analyst for self-registration."""
+    if len(password) < 8 or len(password) > 256:
+        raise AuthStoreError("Password must be between 8 and 256 characters.")
     clean_email = email.strip().lower()
+    if "@" not in clean_email or "." not in clean_email.rsplit("@", 1)[-1]:
+        raise AuthStoreError("Enter a valid email address.")
     if get_user_by_email(clean_email):
         raise AuthStoreError("An account with this email is already registered.")
 

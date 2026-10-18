@@ -31,8 +31,9 @@ pytest==9.1.1
 httpx==0.28.1
 
 # ---- security, telemetry & reporting -------------------------------------
-argon2-cffi>=23.1.0
-pyjwt>=2.8.0
-slowapi>=0.1.9
-psutil>=5.9.0
-reportlab>=4.0.0
+argon2-cffi==25.1.0
+pyjwt==2.15.1
+slowapi==0.1.10
+psutil==7.2.2
+reportlab==5.0.1
+python-dotenv==1.2.2
