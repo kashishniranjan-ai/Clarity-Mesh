@@ -147,23 +147,57 @@ export default function ProvenanceCard({ provenance, metadata }) {
       </div>
 
       {/* C2PA */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 space-y-1">
+      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-white uppercase tracking-wider">
             C2PA / Content Credentials
           </span>
-          <span
-            className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${
-              c2pa.marker_found
-                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                : 'border-slate-500/30 bg-slate-500/10 text-slate-300'
-            }`}
-          >
-            {c2pa.marker_found ? 'Marker found' : 'No marker'}
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${
+                c2pa.marker_found
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                  : 'border-slate-500/30 bg-slate-500/10 text-slate-300'
+              }`}
+            >
+              {c2pa.marker_found ? 'Marker found' : 'No marker'}
+            </span>
+            {p.c2pa_verification?.status && (
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${
+                  p.c2pa_verification.status === 'verified'
+                    ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300'
+                    : p.c2pa_verification.status === 'invalid'
+                    ? 'border-rose-500/40 bg-rose-500/20 text-rose-300'
+                    : 'border-white/10 bg-white/5 text-slate-400'
+                }`}
+              >
+                {p.c2pa_verification.status}
+              </span>
+            )}
+          </div>
         </div>
+
+        {p.c2pa_verification && p.c2pa_verification.status !== 'unavailable' && (
+          <div className="space-y-1 pt-1 border-t border-white/[0.06]">
+            <Row label="Signer / Issuer" value={p.c2pa_verification.signer} />
+            <Row label="Claim generator" value={p.c2pa_verification.claim_generator} />
+            {p.c2pa_verification.validation_errors?.length > 0 && (
+              <div className="py-1">
+                <span className="text-[10px] uppercase font-bold text-rose-400 block">Validation Errors:</span>
+                <ul className="text-[11px] text-rose-300 list-disc list-inside">
+                  {p.c2pa_verification.validation_errors.map((e, idx) => (
+                    <li key={idx}>{e}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
         <p className="py-1 text-[11px] leading-relaxed text-slate-400">
-          {c2pa.note ||
+          {p.c2pa_verification?.disclaimer ||
+            c2pa.note ||
             'Byte-marker presence only — this is not a signature or manifest validation.'}
         </p>
       </div>

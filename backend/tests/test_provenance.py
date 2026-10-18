@@ -149,3 +149,24 @@ def test_canonical_record_hash_is_deterministic_and_sensitive():
     assert re.fullmatch(r"[0-9a-f]{64}", canonical_record_hash(record))
     changed = dict(record, visual_score=0.6)
     assert canonical_record_hash(changed) != canonical_record_hash(record)
+
+
+def test_c2pa_verification_block_and_disclaimer(tmp_path: Path, monkeypatch):
+    data = synthetic_jpeg()
+    path = tmp_path / "test_c2pa.jpg"
+    path.write_bytes(data)
+
+    # 1. When disabled
+    monkeypatch.delenv("CLARITY_ENABLE_C2PA", raising=False)
+    res = extract_provenance(path, media_kind="image")
+    assert "c2pa_verification" in res
+    assert res["c2pa_verification"]["status"] == "unavailable"
+    assert "disclaimer" in res["c2pa_verification"]
+    assert "NOT a deepfake verdict" in res["c2pa_verification"]["disclaimer"]
+
+    # 2. When enabled but c2pa-python is not installed (or mock ImportError)
+    monkeypatch.setenv("CLARITY_ENABLE_C2PA", "true")
+    res_enabled = extract_provenance(path, media_kind="image")
+    assert "c2pa_verification" in res_enabled
+    assert res_enabled["c2pa_verification"]["status"] in ("unavailable", "no_manifest", "invalid")
+

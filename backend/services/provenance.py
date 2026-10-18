@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import struct
 import zlib
@@ -334,6 +335,53 @@ def _detect_c2pa_markers(sample: bytes) -> dict[str, Any]:
     }
 
 
+def _verify_c2pa(path: Path) -> dict[str, Any]:
+    """Verify C2PA manifest signature if enabled and c2pa library is installed."""
+    enabled = os.getenv("CLARITY_ENABLE_C2PA", "false").strip().lower() in ("1", "true", "yes")
+    disclaimer = "C2PA provenance is complementary metadata. It is NOT a deepfake verdict."
+    if not enabled:
+        return {
+            "status": "unavailable",
+            "reason": "C2PA signature verification disabled (CLARITY_ENABLE_C2PA=false).",
+            "disclaimer": disclaimer,
+        }
+    try:
+        import c2pa  # lazy load
+    except ImportError:
+        return {
+            "status": "unavailable",
+            "reason": "c2pa-python library is not installed.",
+            "disclaimer": disclaimer,
+        }
+
+    try:
+        reader = c2pa.Reader(str(path))
+        manifest_json = reader.json()
+        manifest_data = json.loads(manifest_json) if isinstance(manifest_json, str) else manifest_json
+
+        active_manifest = manifest_data.get("active_manifest") or {}
+        claim_generator = active_manifest.get("claim_generator", "Unknown")
+        signature_info = active_manifest.get("signature_info") or {}
+        issuer = signature_info.get("issuer", "Unknown")
+        validation_status = reader.validation_status() or []
+
+        is_valid = len(validation_status) == 0
+        return {
+            "status": "verified" if is_valid else "invalid",
+            "signer": issuer,
+            "claim_generator": claim_generator,
+            "validation_errors": [str(err) for err in validation_status],
+            "disclaimer": disclaimer,
+        }
+    except Exception as exc:
+        msg = str(exc)
+        return {
+            "status": "no_manifest" if "no manifest" in msg.lower() else "failed",
+            "reason": f"C2PA inspection encountered an issue: {msg}",
+            "disclaimer": disclaimer,
+        }
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -365,6 +413,7 @@ def extract_provenance(path: str | Path, media_kind: str = "unknown") -> dict[st
         return {**base, "status": "failed", "error": f"Cannot read stored file: {exc}"}
 
     base["c2pa"] = _detect_c2pa_markers(sample)
+    base["c2pa_verification"] = _verify_c2pa(p)
 
     ext = p.suffix.lower()
     if ext in (".jpg", ".jpeg"):
