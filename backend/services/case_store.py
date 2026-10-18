@@ -29,6 +29,8 @@ def _connect() -> sqlite3.Connection:
                 summary TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'open',
                 priority TEXT NOT NULL DEFAULT 'medium',
+                assigned_to TEXT DEFAULT NULL,
+                assigned_name TEXT DEFAULT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -41,6 +43,12 @@ def _connect() -> sqlite3.Connection:
             CREATE INDEX IF NOT EXISTS idx_cases_updated ON cases(updated_at DESC);
             CREATE INDEX IF NOT EXISTS idx_case_analyses_record ON case_analyses(analysis_id);
         """)
+        # Safe migration: add assignment columns to existing DBs
+        for col, default in [("assigned_to", "NULL"), ("assigned_name", "NULL")]:
+            try:
+                connection.execute(f"ALTER TABLE cases ADD COLUMN {col} TEXT DEFAULT {default}")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
         return connection
     except (OSError, sqlite3.Error) as exc:
         raise CaseStoreError(f"Cannot open case database: {exc}") from exc
@@ -81,7 +89,15 @@ def create_case(title: str, summary: str = "", priority: str = "medium") -> dict
         connection.close()
 
 
-def update_case(case_id: int, *, status: str | None = None, priority: str | None = None, summary: str | None = None) -> dict[str, Any] | None:
+def update_case(
+    case_id: int,
+    *,
+    status: str | None = None,
+    priority: str | None = None,
+    summary: str | None = None,
+    assigned_to: str | None = None,
+    assigned_name: str | None = None,
+) -> dict[str, Any] | None:
     connection = _connect()
     try:
         current = connection.execute("SELECT id FROM cases WHERE id = ?", (case_id,)).fetchone()
@@ -91,6 +107,8 @@ def update_case(case_id: int, *, status: str | None = None, priority: str | None
         if status is not None: updates["status"] = status
         if priority is not None: updates["priority"] = priority
         if summary is not None: updates["summary"] = summary.strip()
+        if assigned_to is not None: updates["assigned_to"] = assigned_to
+        if assigned_name is not None: updates["assigned_name"] = assigned_name
         assignments = ", ".join(f"{column} = ?" for column in updates)
         connection.execute(f"UPDATE cases SET {assignments} WHERE id = ?", (*updates.values(), case_id))
         connection.commit()
@@ -99,6 +117,15 @@ def update_case(case_id: int, *, status: str | None = None, priority: str | None
     finally:
         connection.close()
     return get_case(case_id)
+
+
+def assign_case(case_id: int, analyst_email: str, analyst_name: str = "") -> dict[str, Any] | None:
+    """Assign (or reassign) a case to a specific analyst."""
+    return update_case(
+        case_id,
+        assigned_to=analyst_email,
+        assigned_name=analyst_name,
+    )
 
 
 def get_case(case_id: int) -> dict[str, Any] | None:

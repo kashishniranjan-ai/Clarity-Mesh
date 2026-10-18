@@ -137,3 +137,24 @@ def require_admin_always(
             detail="Administrator clearance required. Access denied.",
         )
     return current_user
+
+
+def require_role(required_role: str):
+    """Factory creating a dependency that checks if the authenticated user has a specific role.
+
+    Config-driven role gating stub for portfolio/educational demonstration.
+    (Production systems would integrate enterprise SSO/OIDC/RBAC).
+    """
+    async def _role_checker(
+        current_user: dict[str, Any] = Depends(get_current_user),
+    ) -> dict[str, Any]:
+        user_role = current_user.get("role")
+        if user_role != required_role and user_role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Clearance level '{required_role}' required. Access denied.",
+            )
+        return current_user
+
+    return _role_checker
+

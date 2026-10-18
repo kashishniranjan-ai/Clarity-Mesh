@@ -17,6 +17,11 @@ from pydantic import BaseModel
 from services.audit_store import list_audit_logs, log_audit_event
 from services.auth_deps import get_client_ip, require_admin
 from services.auth_store import list_users, update_user_role
+from services.chain_of_custody import (
+    ChainOfCustodyError,
+    list_custody_events,
+    verify_chain,
+)
 from services.forensic_engine import get_forensic_config, update_forensic_config
 from services.telemetry_service import get_real_system_telemetry
 
@@ -139,6 +144,45 @@ async def change_user_role(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+
+
+@router.get("/custody")
+async def get_custody_log(
+    target: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+):
+    """List chain-of-custody log entries with cryptographic hash links."""
+    try:
+        events = list_custody_events(target=target, limit=limit)
+        return {
+            "status": "success",
+            "total": len(events),
+            "events": events,
+        }
+    except ChainOfCustodyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get("/custody/verify")
+async def verify_custody(
+    limit: int = Query(5000, ge=1, le=50000),
+):
+    """Walk and verify the cryptographic chain of custody from genesis to HEAD."""
+    try:
+        report = verify_chain(limit=limit)
+        return {
+            "status": "success",
+            "verification": report,
+        }
+    except ChainOfCustodyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
+
 
 
 @router.get("/threat-matrix")

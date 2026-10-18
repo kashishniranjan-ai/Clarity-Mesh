@@ -252,6 +252,28 @@ The UI is then available at the port Vite prints (usually **http://localhost:517
   - Context menu and popup trigger in-page media inspections, bridging web content with the Clarity Mesh workstation.
   - Documented client-side inference roadmap for future ONNX Runtime Web integration.
 
+### Phase 3: Provenance, Watermarks & Robustness Evaluation
+- **C2PA Signature Verification**: Read-only manifest validation inspecting digital signatures, claim generators, and tamper indicators (`CLARITY_ENABLE_C2PA`).
+- **Adversarial Robustness Stress Testing (`POST /api/v2/robustness`)**: Measures detector sensitivity using Fast Gradient Sign Method (FGSM) and Projected Gradient Descent (PGD) across varying epsilon bounds ($\epsilon \in [0.001, 0.05]$).
+- **Physio-Acoustic Coupling / rPPG (`POST /api/v2/rppg`)**: Extracts blood volume pulse waves from facial ROI (CHROM method) and measures cross-modal speech-envelope synchronization. Always clearly labeled as an experimental triage signal that never mutates the primary model verdict.
+
+### Phase 4: Team Collaboration & Chain of Custody
+- **Cryptographic Chain of Custody (`backend/services/chain_of_custody.py`)**:
+  - Tamper-evident ledger linking every investigation event (`CASE_CREATED`, `EVIDENCE_LINKED`, `COMMENT_ADDED`, `CASE_ASSIGNED`) with a deterministic `SHA-256(timestamp + action + target + details + prev_hash)`.
+  - Linear chain verification endpoint (`GET /api/admin/custody/verify` and `GET /api/cases/{id}/custody`) detecting any broken link or altered byte.
+- **Investigation Comments & Threading (`backend/services/case_comments.py`)**:
+  - Threaded analyst observations with author identity and cascading cleanup on case deletion.
+  - Role-gated comment deletion (author or root administrator clearance only).
+- **Analyst Assignment (`PATCH /api/cases/{id}/assign`)**:
+  - Config-driven investigator dispatch assigning cases to specialized forensics personnel.
+- **Forensic UI Integration**:
+  - Dedicated tabs in `Cases.jsx` for Evidence, Investigator Notes, and Hash-Chained Custody with live verification status chips (Intact / Tampered).
+
+### Research Spikes
+- **Generator Source Attribution (`POST /api/v2/attribution`)**: Architecture scaffold documenting raw-patch PRNU residual extraction (Marra et al., 2019) and CLIP feature-space probing (Ojha et al., 2023). Honestly returns `status: "unavailable"` in absence of authorized multi-generator checkpoint (`docs/DESIGN_source_attribution.md`).
+- **Invisible Watermarks / SynthID (`POST /api/v2/watermark`)**: Architectural scaffold for imperceptible watermark detection. Honestly returns `status: "unavailable"` documenting future work pending open detection weights.
+
+
 ## Datasets and Model Files
 
 Datasets and model weights are **not** stored in git. Place datasets under `datasets/`; the visual model's `model.pt` lives under `backend/weights/` (downloaded on first use). Both locations are ignored by `.gitignore`.

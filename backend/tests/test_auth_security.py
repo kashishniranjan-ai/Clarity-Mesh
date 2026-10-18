@@ -207,3 +207,37 @@ def test_account_lockout_after_repeated_failures(client):
         json={"email": "lockout.target@claritymesh.ai", "password": "ValidPassword#2026"},
     )
     assert res_locked.status_code == 423
+
+
+def test_require_role_helper():
+    """require_role enforces matching role or admin clearance, rejecting others."""
+    import asyncio
+    from services.auth_deps import require_role
+    from fastapi import HTTPException
+
+    async def _test():
+        analyst_checker = require_role("analyst")
+        admin_checker = require_role("admin")
+        reviewer_checker = require_role("reviewer")
+
+        analyst_user = {"id": "1", "email": "analyst@test.ai", "role": "analyst"}
+        admin_user = {"id": "2", "email": "admin@test.ai", "role": "admin"}
+
+        # Analyst allowed on analyst checker
+        assert (await analyst_checker(analyst_user)) == analyst_user
+        # Admin allowed everywhere
+        assert (await analyst_checker(admin_user)) == admin_user
+        assert (await reviewer_checker(admin_user)) == admin_user
+
+        # Analyst forbidden on admin or reviewer checker
+        with pytest.raises(HTTPException) as exc_info:
+            await admin_checker(analyst_user)
+        assert exc_info.value.status_code == 403
+
+        with pytest.raises(HTTPException) as exc_info2:
+            await reviewer_checker(analyst_user)
+        assert exc_info2.value.status_code == 403
+
+    asyncio.run(_test())
+
+

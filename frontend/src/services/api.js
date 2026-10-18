@@ -301,6 +301,34 @@ export const getForensicNarrative = (payload) =>
     body: JSON.stringify(payload),
   });
 
+/** POST /api/v2/robustness — adversarial sensitivity stress testing (FGSM / PGD). */
+export const runRobustnessEvaluation = (params) =>
+  jsonApi('/api/v2/robustness', {
+    method: 'POST',
+    body: JSON.stringify({
+      stored_name: params.storedName,
+      analysis_id: params.analysisId,
+      image_b64: params.imageB64,
+      epsilons: params.epsilons,
+      attack: params.attack || 'fgsm',
+      pgd_steps: params.pgdSteps,
+      pgd_alpha: params.pgdAlpha,
+      force_enable: params.forceEnable || false,
+    }),
+  });
+
+/** POST /api/v2/rppg — physio-acoustic coupling (rPPG pulse extraction & speech correlation). */
+export const runRPPGAnalysis = (params) =>
+  jsonApi('/api/v2/rppg', {
+    method: 'POST',
+    body: JSON.stringify({
+      stored_name: params.storedName,
+      analysis_id: params.analysisId,
+      max_frames: params.maxFrames || 120,
+      force_enable: params.forceEnable || false,
+    }),
+  });
+
 /** GET /api/history — recent stored analyses. */
 export async function getHistory(limit = 50) {
   return jsonApi(`/api/history?limit=${limit}`);
@@ -335,6 +363,41 @@ export const removeAnalysisFromCase = (caseId, analysisId) =>
     `/api/cases/${encodeURIComponent(caseId)}/analyses/${encodeURIComponent(analysisId)}`,
     { method: 'DELETE' },
   );
+export const getCaseComments = (caseId) =>
+  jsonApi(`/api/cases/${encodeURIComponent(caseId)}/comments`);
+export const addCaseComment = (caseId, body) =>
+  jsonApi(`/api/cases/${encodeURIComponent(caseId)}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  });
+export const deleteCaseComment = (caseId, commentId) =>
+  jsonApi(`/api/cases/${encodeURIComponent(caseId)}/comments/${encodeURIComponent(commentId)}`, {
+    method: 'DELETE',
+  });
+export const assignCase = (caseId, analystEmail, analystName = '') =>
+  jsonApi(`/api/cases/${encodeURIComponent(caseId)}/assign`, {
+    method: 'PATCH',
+    body: JSON.stringify({ analyst_email: analystEmail, analyst_name: analystName }),
+  });
+export const getCaseCustody = (caseId, limit = 100) =>
+  jsonApi(`/api/cases/${encodeURIComponent(caseId)}/custody?limit=${encodeURIComponent(limit)}`);
+export const getAdminCustody = (limit = 100, target = null) => {
+  const query = target ? `?limit=${limit}&target=${encodeURIComponent(target)}` : `?limit=${limit}`;
+  return jsonApi(`/api/admin/custody${query}`);
+};
+export const verifyAdminCustody = (limit = 5000) =>
+  jsonApi(`/api/admin/custody/verify?limit=${encodeURIComponent(limit)}`);
+export const getSourceAttribution = (storedName) =>
+  jsonApi('/api/v2/attribution', {
+    method: 'POST',
+    body: JSON.stringify({ stored_name: storedName }),
+  });
+export const getWatermarkDetection = (storedName) =>
+  jsonApi('/api/v2/watermark', {
+    method: 'POST',
+    body: JSON.stringify({ stored_name: storedName }),
+  });
+
 
 // --- Research Assistant APIs ---
 export const getAssistantStatus = () => jsonApi('/api/assistant/status');

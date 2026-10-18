@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../context/AuthContext';
 import {
   addAnalysisToCase,
+  addCaseComment,
+  assignCase,
   createCase,
   deleteCase,
+  deleteCaseComment,
   getCase,
+  getCaseComments,
+  getCaseCustody,
   getCases,
   getHistory,
   removeAnalysisFromCase,
@@ -14,6 +20,7 @@ import {
 
 const STATUS = { open: 'Open', in_review: 'In Review', resolved: 'Resolved' };
 const PRIORITIES = ['low', 'medium', 'high', 'critical'];
+
 const date = (value) =>
   value
     ? new Date(value).toLocaleDateString(undefined, {
@@ -22,6 +29,15 @@ const date = (value) =>
         year: 'numeric',
       })
     : '—';
+
+const formatTime = (value) =>
+  value
+    ? new Date(value).toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+    : '';
 
 const outcomeOf = (item) =>
   item?.multimodal_classification ||
@@ -38,7 +54,9 @@ function Pill({ children, tone = 'slate' }) {
     slate: 'border-white/[0.08] bg-white/[0.03] text-slate-300',
   };
   return (
-    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold tracking-wide ${tones[tone]}`}>
+    <span
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold tracking-wide ${tones[tone]}`}
+    >
       {children}
     </span>
   );
@@ -108,45 +126,47 @@ function CaseBoard() {
   return (
     <main className="mx-auto min-h-[78vh] max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       {/* Header */}
-      <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
+      <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
         <div>
-          <Pill tone="violet">Evidence Workflow</Pill>
+          <div className="flex items-center gap-2">
+            <Pill tone="violet">Investigation Hub</Pill>
+            <span className="text-xs text-slate-400 font-mono">CHAIN-OF-CUSTODY AUDITED</span>
+          </div>
           <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-            Investigation Case Files
+            Forensic Case Files
           </h1>
-          <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-400">
-            Group related media items, track review statuses, and curate auditable investigation evidence dossiers.
+          <p className="mt-2 text-sm text-slate-400 max-w-2xl">
+            Correlate related deepfake analyses, track chain-of-custody signatures, assign lead
+            analysts, and maintain tamper-evident investigation dossiers.
           </p>
         </div>
 
-        <motion.button
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
+        <button
           onClick={() => setShowCreate(true)}
-          className="btn-shimmer rounded-2xl bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-400 px-5 py-3 text-xs font-bold text-black shadow-lg shadow-cyan-500/25 transition-all"
+          className="btn-shimmer flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-400 px-5 py-3 text-xs font-bold text-black shadow-lg shadow-cyan-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
         >
-          ＋ New Case File
-        </motion.button>
+          <span className="text-base leading-none">＋</span>
+          <span>New Investigation</span>
+        </button>
       </div>
 
       {/* Metrics Row */}
-      <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="mt-8 grid grid-cols-3 gap-3.5 sm:gap-5">
         {[
-          ['All Cases', items.length, 'text-white'],
-          ['Open Status', counts.open, 'text-cyan-300'],
-          ['Under Review', counts.in_review, 'text-amber-300'],
-          ['Resolved Dossiers', counts.resolved, 'text-emerald-300'],
-        ].map(([label, value, color]) => (
-          <div key={label} className="glass-card p-5">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
-            <p className={`mt-2 font-mono text-2xl sm:text-3xl font-bold ${color}`}>{value}</p>
+          { label: 'Active Open Cases', count: counts.open, tone: 'text-cyan-400', border: 'border-cyan-500/20' },
+          { label: 'In Forensics Review', count: counts.in_review, tone: 'text-amber-400', border: 'border-amber-500/20' },
+          { label: 'Resolved Dossiers', count: counts.resolved, tone: 'text-emerald-400', border: 'border-emerald-500/20' },
+        ].map((stat) => (
+          <div key={stat.label} className={`glass-card p-4 sm:p-5 border ${stat.border}`}>
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{stat.label}</p>
+            <p className={`mt-2 font-mono text-2xl sm:text-3xl font-bold ${stat.tone}`}>{stat.count}</p>
           </div>
         ))}
       </div>
 
-      {/* Filter / Search Bar */}
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
+      {/* Filters */}
+      <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative flex-1 max-w-md">
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">🔍</span>
           <input
             value={query}
@@ -192,9 +212,11 @@ function CaseBoard() {
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/30 font-mono text-xs font-bold text-cyan-300">
                     #{String(item.id).padStart(2, '0')}
                   </div>
-                  <Pill tone={item.status === 'resolved' ? 'green' : item.status === 'in_review' ? 'amber' : 'violet'}>
-                    {STATUS[item.status] || item.status}
-                  </Pill>
+                  <div className="flex flex-col items-end gap-1.5">
+                    <Pill tone={item.status === 'resolved' ? 'green' : item.status === 'in_review' ? 'amber' : 'violet'}>
+                      {STATUS[item.status] || item.status}
+                    </Pill>
+                  </div>
                 </div>
 
                 <h3 className="mt-4 line-clamp-1 text-base font-bold text-white group-hover:text-cyan-300 transition-colors">
@@ -203,6 +225,13 @@ function CaseBoard() {
                 <p className="mt-2 min-h-10 line-clamp-2 text-xs leading-relaxed text-slate-400">
                   {item.summary || 'No investigation notes have been logged.'}
                 </p>
+
+                {item.assigned_to && (
+                  <div className="mt-3 flex items-center gap-1.5 text-[11px] text-cyan-300 font-mono">
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                    <span>Assignee: {item.assigned_name || item.assigned_to}</span>
+                  </div>
+                )}
 
                 <div className="mt-6 flex items-center justify-between border-t border-white/[0.06] pt-4">
                   <div className="flex items-center gap-2">
@@ -327,18 +356,37 @@ function CaseBoard() {
 
 function CaseDetail({ id }) {
   const navigate = useNavigate();
+  const { user, isAdmin } = useAuth();
   const [item, setItem] = useState(null);
   const [history, setHistory] = useState([]);
+  const [comments, setComments] = useState([]);
+  const [custody, setCustody] = useState({ items: [], chain_intact: true, verification: null });
   const [selected, setSelected] = useState('');
+  const [newComment, setNewComment] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [assignEmail, setAssignEmail] = useState('');
+  const [assignName, setAssignName] = useState('');
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [assignSuccess, setAssignSuccess] = useState(false);
+  const [activeTab, setActiveTab] = useState('evidence'); // 'evidence' | 'comments' | 'custody'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [caseData, historyData] = await Promise.all([getCase(id), getHistory(100)]);
+      const [caseData, historyData, commentsData, custodyData] = await Promise.all([
+        getCase(id),
+        getHistory(100),
+        getCaseComments(id).catch(() => ({ items: [] })),
+        getCaseCustody(id).catch(() => ({ items: [], chain_intact: true })),
+      ]);
       setItem(caseData);
       setHistory(historyData.items || []);
+      setComments(commentsData.items || []);
+      setCustody(custodyData || { items: [], chain_intact: true });
+      setAssignEmail(caseData.assigned_to || '');
+      setAssignName(caseData.assigned_name || '');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -356,6 +404,8 @@ function CaseDetail({ id }) {
   const patch = async (body) => {
     try {
       setItem(await updateCase(id, body));
+      // Refresh custody timeline after mutation
+      getCaseCustody(id).then(setCustody).catch(() => {});
     } catch (err) {
       setError(err.message);
     }
@@ -366,8 +416,52 @@ function CaseDetail({ id }) {
     try {
       setItem(await addAnalysisToCase(id, selected));
       setSelected('');
+      getCaseCustody(id).then(setCustody).catch(() => {});
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const handlePostComment = async (event) => {
+    event.preventDefault();
+    if (!newComment.trim()) return;
+    setSubmittingComment(true);
+    try {
+      const added = await addCaseComment(id, newComment.trim());
+      setComments((prev) => [added, ...prev]);
+      setNewComment('');
+      getCaseCustody(id).then(setCustody).catch(() => {});
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    if (!window.confirm('Delete this comment?')) return;
+    try {
+      await deleteCaseComment(id, commentId);
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleAssignAnalyst = async (event) => {
+    event.preventDefault();
+    if (!assignEmail.trim()) return;
+    setIsAssigning(true);
+    try {
+      const updated = await assignCase(id, assignEmail.trim(), assignName.trim());
+      setItem(updated);
+      setAssignSuccess(true);
+      setTimeout(() => setAssignSuccess(false), 3000);
+      getCaseCustody(id).then(setCustody).catch(() => {});
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsAssigning(false);
     }
   };
 
@@ -375,6 +469,9 @@ function CaseDetail({ id }) {
     const report = {
       generated_at: new Date().toISOString(),
       case: item,
+      chain_of_custody_intact: custody.chain_intact,
+      chain_events: custody.items,
+      comments: comments,
       caveat: 'Detector outputs are uncalibrated investigative aids, not proof of legal authenticity.',
     };
     const link = document.createElement('a');
@@ -413,6 +510,7 @@ function CaseDetail({ id }) {
         ← Investigation Desk
       </Link>
 
+      {/* Case Header */}
       <div className="mt-4 flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
         <div className="max-w-3xl">
           <div className="flex flex-wrap items-center gap-2">
@@ -420,6 +518,25 @@ function CaseDetail({ id }) {
             <Pill tone={item.status === 'resolved' ? 'green' : item.status === 'in_review' ? 'amber' : 'violet'}>
               {STATUS[item.status]}
             </Pill>
+            {item.assigned_to ? (
+              <Pill tone="violet">👤 {item.assigned_name || item.assigned_to}</Pill>
+            ) : (
+              <Pill tone="slate">Unassigned</Pill>
+            )}
+            <div
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold tracking-wide ${
+                custody.chain_intact
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                  : 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  custody.chain_intact ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'
+                }`}
+              />
+              <span>{custody.chain_intact ? 'Custody Chain: INTACT' : 'Custody Chain: TAMPERED'}</span>
+            </div>
           </div>
           <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-white">{item.title}</h1>
           <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-400">
@@ -456,80 +573,275 @@ function CaseDetail({ id }) {
         </div>
       )}
 
+      {/* Main Grid: Tabs on left, Inspector sidebar on right */}
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_320px]">
-        {/* Linked Records */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-base font-bold text-white">Linked Analysis Evidence</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Media items referenced in this investigation.</p>
-            </div>
-            <Pill>{item.analyses?.length || 0} Items</Pill>
+        <div>
+          {/* Tab Navigation */}
+          <div className="flex border-b border-white/10 gap-2 mb-6">
+            <button
+              onClick={() => setActiveTab('evidence')}
+              className={`pb-3 px-4 text-xs font-bold transition-colors border-b-2 ${
+                activeTab === 'evidence'
+                  ? 'border-cyan-400 text-cyan-300'
+                  : 'border-transparent text-slate-400 hover:text-white'
+              }`}
+            >
+              Linked Evidence ({item.analyses?.length || 0})
+            </button>
+            <button
+              onClick={() => setActiveTab('comments')}
+              className={`pb-3 px-4 text-xs font-bold transition-colors border-b-2 ${
+                activeTab === 'comments'
+                  ? 'border-cyan-400 text-cyan-300'
+                  : 'border-transparent text-slate-400 hover:text-white'
+              }`}
+            >
+              Forensic Comments ({comments.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('custody')}
+              className={`pb-3 px-4 text-xs font-bold transition-colors border-b-2 ${
+                activeTab === 'custody'
+                  ? 'border-cyan-400 text-cyan-300'
+                  : 'border-transparent text-slate-400 hover:text-white'
+              }`}
+            >
+              Chain of Custody ({custody.items?.length || 0})
+            </button>
           </div>
 
-          {item.analyses?.length ? (
-            <div className="space-y-3.5">
-              {item.analyses.map((record) => (
-                <motion.article
-                  layout
-                  key={record.id}
-                  className="glass-card p-5"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/30 font-mono text-xs font-bold text-cyan-300">
-                        #{record.id}
-                      </span>
-                      <div>
-                        <p className="text-sm font-bold text-white">
-                          {record.media_type || 'Media'} &bull; {date(record.created_at)}
+          {/* TAB 1: EVIDENCE */}
+          {activeTab === 'evidence' && (
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-base font-bold text-white">Linked Analysis Evidence</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Media items referenced in this investigation.</p>
+                </div>
+                <Pill>{item.analyses?.length || 0} Items</Pill>
+              </div>
+
+              {item.analyses?.length ? (
+                <div className="space-y-3.5">
+                  {item.analyses.map((record) => (
+                    <motion.article layout key={record.id} className="glass-card p-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/30 font-mono text-xs font-bold text-cyan-300">
+                            #{record.id}
+                          </span>
+                          <div>
+                            <p className="text-sm font-bold text-white">
+                              {record.media_type || 'Media'} &bull; {date(record.created_at)}
+                            </p>
+                            <p className="text-[11px] text-slate-400 mt-0.5 capitalize">
+                              {outcomeOf(record).replace(/_/g, ' ')}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            try {
+                              setItem(await removeAnalysisFromCase(id, record.id));
+                              getCaseCustody(id).then(setCustody).catch(() => {});
+                            } catch (err) {
+                              setError(err.message);
+                            }
+                          }}
+                          className="text-xs text-slate-400 hover:text-rose-300"
+                        >
+                          Unlink
+                        </button>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {[
+                          ['Visual Score', record.visual_score],
+                          ['Audio Biometrics', record.audio_score],
+                          ['AI Image Diffusion', record.ai_image_score],
+                          ['Fused Verdict', record.fused_score],
+                        ].map(([label, score]) => (
+                          <div
+                            key={label}
+                            className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2 text-xs"
+                          >
+                            <p className="text-[10px] uppercase font-semibold text-slate-400">{label}</p>
+                            <p className="mt-1 font-mono font-bold text-slate-200">
+                              {Number.isFinite(score) ? `${(score * 100).toFixed(1)}%` : '—'}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.article>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center text-xs text-slate-400">
+                  No analysis records linked to this case yet. Use the sidebar to attach stored analyses.
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* TAB 2: COMMENTS */}
+          {activeTab === 'comments' && (
+            <section className="space-y-5">
+              <form onSubmit={handlePostComment} className="glass-card p-5">
+                <label className="block text-xs font-bold text-slate-300 mb-2">
+                  Add Forensic Observation / Team Note
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  maxLength={5000}
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Record investigative findings, hypothesis notes, or peer review comments…"
+                  className="w-full resize-y rounded-xl border border-white/10 bg-black/30 p-3.5 text-xs leading-relaxed text-white outline-none focus:border-cyan-400/60"
+                />
+                <div className="mt-3 flex justify-between items-center">
+                  <span className="text-[10px] text-slate-500">
+                    Logged to immutable chain-of-custody upon submission.
+                  </span>
+                  <button
+                    type="submit"
+                    disabled={submittingComment || !newComment.trim()}
+                    className="btn-shimmer rounded-xl bg-cyan-500 px-4 py-2 text-xs font-bold text-black disabled:opacity-40"
+                  >
+                    {submittingComment ? 'Posting…' : 'Post Comment'}
+                  </button>
+                </div>
+              </form>
+
+              {comments.length ? (
+                <div className="space-y-3">
+                  {comments.map((comm) => {
+                    const isAuthor =
+                      user && (user.id === comm.author_id || user.email === comm.author_email);
+                    const canDelete = isAuthor || isAdmin;
+                    return (
+                      <div key={comm.id} className="glass-card p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-xs font-bold text-cyan-300">
+                              {comm.author_name ? comm.author_name[0].toUpperCase() : 'A'}
+                            </span>
+                            <div>
+                              <p className="text-xs font-bold text-white">
+                                {comm.author_name || comm.author_email}
+                              </p>
+                              <p className="text-[10px] text-slate-500">
+                                {comm.author_email} &bull; {date(comm.created_at)} at {formatTime(comm.created_at)}
+                              </p>
+                            </div>
+                          </div>
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDeleteComment(comm.id)}
+                              className="text-[11px] text-slate-500 hover:text-rose-400 transition-colors"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed pl-9">
+                          {comm.body}
                         </p>
-                        <p className="text-[11px] text-slate-400 mt-0.5 capitalize">
-                          {outcomeOf(record).replace(/_/g, ' ')}
-                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center text-xs text-slate-400">
+                  No forensic comments logged yet. Use the form above to add observations.
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* TAB 3: CHAIN OF CUSTODY */}
+          {activeTab === 'custody' && (
+            <section className="space-y-4">
+              {/* Integrity status card */}
+              <div
+                className={`glass-card p-5 border ${
+                  custody.chain_intact ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-rose-500/30 bg-rose-500/5'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{custody.chain_intact ? '🛡️' : '⚠️'}</span>
+                    <div>
+                      <h3 className="text-sm font-bold text-white">
+                        {custody.chain_intact
+                          ? 'Cryptographic Chain Integrity Verified'
+                          : 'Chain of Custody Anomaly Detected'}
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {custody.chain_intact
+                          ? 'Each event is SHA-256 hash-chained to its predecessor, guaranteeing tamper-evidence.'
+                          : 'A cryptographic hash mismatch was detected. Investigation trail integrity is compromised.'}
+                      </p>
+                    </div>
+                  </div>
+                  <Pill tone={custody.chain_intact ? 'green' : 'rose'}>
+                    {custody.chain_intact ? 'INTACT' : 'TAMPERED'}
+                  </Pill>
+                </div>
+              </div>
+
+              {/* Custody events timeline */}
+              {custody.items?.length ? (
+                <div className="space-y-3">
+                  {custody.items.map((event, idx) => (
+                    <div key={event.id || idx} className="glass-card p-4 space-y-2 font-mono text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded bg-cyan-500/15 border border-cyan-500/30 px-2 py-0.5 text-[10px] font-bold text-cyan-300 font-sans">
+                            {event.action}
+                          </span>
+                          <span className="text-slate-400 text-[11px] font-sans">
+                            {event.actor_email ? `by ${event.actor_email}` : 'System'}
+                          </span>
+                        </div>
+                        <span className="text-slate-500 text-[10px]">
+                          {date(event.timestamp)} {formatTime(event.timestamp)}
+                        </span>
+                      </div>
+
+                      {event.details && (
+                        <div className="rounded-lg bg-black/30 p-2.5 text-[11px] text-slate-300 font-sans break-all">
+                          {typeof event.details === 'object'
+                            ? JSON.stringify(event.details)
+                            : String(event.details)}
+                        </div>
+                      )}
+
+                      <div className="pt-2 border-t border-white/[0.05] grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] text-slate-500">
+                        <div className="truncate">
+                          <span className="text-slate-400">Entry Hash: </span>
+                          <span className="text-cyan-400 font-bold">{event.entry_hash ? event.entry_hash.slice(0, 16) + '…' : '—'}</span>
+                        </div>
+                        <div className="truncate">
+                          <span className="text-slate-400">Prev Hash: </span>
+                          <span>{event.prev_hash ? event.prev_hash.slice(0, 16) + '…' : '(Genesis)'}</span>
+                        </div>
                       </div>
                     </div>
-                    <button
-                      onClick={async () => {
-                        try {
-                          setItem(await removeAnalysisFromCase(id, record.id));
-                        } catch (err) {
-                          setError(err.message);
-                        }
-                      }}
-                      className="text-xs text-slate-400 hover:text-rose-300"
-                    >
-                      Unlink
-                    </button>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    {[
-                      ['Visual Score', record.visual_score],
-                      ['Audio Biometrics', record.audio_score],
-                      ['AI Image Diffusion', record.ai_image_score],
-                      ['Fused Verdict', record.fused_score],
-                    ].map(([label, score]) => (
-                      <div key={label} className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2 text-xs">
-                        <p className="text-[10px] uppercase font-semibold text-slate-400">{label}</p>
-                        <p className="mt-1 font-mono font-bold text-slate-200">
-                          {Number.isFinite(score) ? `${(score * 100).toFixed(1)}%` : '—'}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </motion.article>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center text-xs text-slate-400">
-              No analysis records linked to this case yet.
-            </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center text-xs text-slate-400">
+                  No custody events recorded for this case yet.
+                </div>
+              )}
+            </section>
           )}
-        </section>
+        </div>
 
         {/* Controls Sidebar */}
         <aside className="space-y-4">
+          {/* Status & Priority */}
           <section className="glass-card p-6">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">
               Status & Priority
@@ -576,6 +888,53 @@ function CaseDetail({ id }) {
             </label>
           </section>
 
+          {/* Analyst Assignment Card */}
+          <section className="glass-card p-6">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+              Analyst Assignment
+            </p>
+            <form onSubmit={handleAssignAnalyst} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  Analyst Email
+                </label>
+                <input
+                  required
+                  type="email"
+                  value={assignEmail}
+                  onChange={(e) => setAssignEmail(e.target.value)}
+                  placeholder="investigator@agency.gov"
+                  className="w-full rounded-xl border border-white/10 bg-[#0E121E] px-3 py-2 text-xs text-white outline-none focus:border-cyan-400/60"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  Analyst Full Name
+                </label>
+                <input
+                  type="text"
+                  value={assignName}
+                  onChange={(e) => setAssignName(e.target.value)}
+                  placeholder="e.g. Dana Scully"
+                  className="w-full rounded-xl border border-white/10 bg-[#0E121E] px-3 py-2 text-xs text-white outline-none focus:border-cyan-400/60"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isAssigning || !assignEmail.trim()}
+                className="btn-shimmer w-full rounded-xl bg-cyan-500/20 border border-cyan-500/40 px-3 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-500/30 disabled:opacity-40"
+              >
+                {isAssigning ? 'Saving…' : 'Update Assignment'}
+              </button>
+              {assignSuccess && (
+                <p className="text-[11px] text-emerald-400 text-center">
+                  ✓ Assignment logged to custody chain.
+                </p>
+              )}
+            </form>
+          </section>
+
+          {/* Attach Analysis */}
           <section className="glass-card p-6">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
               Attach Analysis Record

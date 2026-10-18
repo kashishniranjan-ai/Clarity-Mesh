@@ -32,10 +32,15 @@ from routes.explain import router as explain_router
 from routes.history import router as history_router
 from routes.narrative import router as narrative_router
 from routes.reports import router as reports_router
+from routes.research import router as research_router
+from routes.robustness import router as robustness_router
+from routes.rppg import router as rppg_router
 from routes.ws_stream import router as ws_stream_router
 from services.audit_store import init_audit_db
 from services.auth_deps import get_current_user, require_admin
 from services.auth_store import init_auth_db, seed_admin
+from services.case_comments import init_comments_db
+from services.chain_of_custody import init_custody_db
 from services.history_store import HistoryStoreError, init_db
 from services.jwt_service import create_access_token, create_refresh_token
 from services.rate_limit import limiter
@@ -93,6 +98,16 @@ async def lifespan(_app: FastAPI):
         init_audit_db()
     except Exception as exc:
         print(f"[startup] Audit database initialization warning: {exc}")
+
+    try:
+        init_custody_db()
+    except Exception as exc:
+        print(f"[startup] Custody chain database initialization warning: {exc}")
+
+    try:
+        init_comments_db()
+    except Exception as exc:
+        print(f"[startup] Comments database initialization warning: {exc}")
 
     yield
 
@@ -183,6 +198,12 @@ app.include_router(reports_router, prefix="/api/reports", tags=["reports"])
 app.include_router(narrative_router, prefix="/api/narrative", tags=["narrative"])
 app.include_router(narrative_router, prefix="/api", tags=["narrative"])
 app.include_router(ws_stream_router, tags=["stream"])
+app.include_router(robustness_router, prefix="/api/robustness", tags=["robustness"])
+app.include_router(robustness_router, prefix="/api", tags=["robustness"])
+app.include_router(rppg_router, prefix="/api/rppg", tags=["rppg"])
+app.include_router(rppg_router, prefix="/api", tags=["rppg"])
+app.include_router(research_router, tags=["research"])
+
 
 # ---------------------------------------------------------------------------
 # Dependency injection: JWT + RBAC enforcement

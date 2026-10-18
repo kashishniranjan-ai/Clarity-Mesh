@@ -113,6 +113,11 @@ def init_auth_db() -> None:
                 );
                 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
             """)
+            for col, default in [("specialty", "''"), ("assigned_cases", "'[]'")]:
+                try:
+                    conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT {default}")
+                except sqlite3.OperationalError:
+                    pass
     finally:
         conn.close()
 def get_user_by_email(email: str) -> dict[str, Any] | None:
