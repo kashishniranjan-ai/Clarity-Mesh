@@ -3,50 +3,24 @@ import { motion } from 'framer-motion';
 
 const HIGHLIGHTS = [
   {
-    icon: (
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="3" />
-        <path d="M8 21h8M12 17v4" />
-      </svg>
-    ),
-    title: 'Multimodal Spectrum',
-    text: 'Analyze images, high-definition video, and studio audio tracks simultaneously.',
-    gradient: 'from-cyan-500/20 via-sky-500/10 to-transparent',
-    iconColor: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
+    title: 'Operational command surface',
+    text: 'Upgraded navigation, clearer hierarchy, and sharper analyst workflows for triage teams.',
   },
   {
-    icon: (
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-      </svg>
-    ),
-    title: 'Three Neural Backbones',
-    text: 'EfficientNet-B7 DFDC winner, wav2vec2 acoustic anti-spoofing, and CLIP ViT-L/14.',
-    gradient: 'from-rose-500/20 via-pink-500/10 to-transparent',
-    iconColor: 'text-rose-400 bg-rose-500/10 border-rose-500/20',
+    title: 'Advanced research hooks',
+    text: 'Robustness stress tests, provenance readiness, and experimental physiologic checks now surface in-product.',
   },
   {
-    icon: (
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
-        <line x1="16" y1="13" x2="8" y2="13" />
-        <line x1="16" y1="17" x2="8" y2="17" />
-        <polyline points="10 9 9 9 8 9" />
-      </svg>
-    ),
-    title: 'Explainable Triage',
-    text: 'Transparent model weights, decision thresholds, and instant case management reports.',
-    gradient: 'from-amber-500/20 via-orange-500/10 to-transparent',
-    iconColor: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+    title: 'Executive-ready outputs',
+    text: 'Case flow, reporting, explainability, and evidence export stay connected from intake to review.',
   },
 ];
 
 const STATS = [
-  { value: '4', label: 'Trained Models' },
-  { value: '3', label: 'Modalities' },
-  { value: '50MB', label: 'Max File Size' },
-  { value: '0.0ms', label: 'Inference Lag' },
+  { value: '3', label: 'Core Modalities' },
+  { value: '4+', label: 'Detection Layers' },
+  { value: 'PDF/CSV/JSON', label: 'Export Paths' },
+  { value: 'Audit-Ready', label: 'Evidence Flow' },
 ];
 
 function AmbientGlowMesh() {
@@ -157,12 +131,16 @@ function AmbientLightCanvas() {
     createParticles();
     draw();
 
-    window.addEventListener('resize', () => {
+    const handleResize = () => {
       resize();
       createParticles();
-    });
+    };
+    window.addEventListener('resize', handleResize);
 
-    return () => cancelAnimationFrame(animationId);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(animationId);
+    };
   }, []);
 
   return (
@@ -176,120 +154,168 @@ function AmbientLightCanvas() {
 
 export default function Hero() {
   return (
-    <section className="relative min-h-[85vh] flex items-center justify-center overflow-hidden py-16 lg:py-24">
+    <section className="relative overflow-hidden py-16 lg:py-24">
       <AmbientGlowMesh />
       <AmbientLightCanvas />
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-3xl text-center">
-          {/* Top Badge */}
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
-            className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-1.5 text-xs font-bold text-cyan-200 backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.25)]"
-          >
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-400" />
-            </span>
-            Multimodal Forensic Intelligence · Workstation Edition
-          </motion.div>
-
-          {/* Headline */}
-          <motion.h1
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1, ease: 'easeOut' }}
-            className="mt-7 text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight leading-[1.08]"
-          >
-            <span className="text-white">Verify Media Authenticity</span>
-            <br />
-            <span className="bg-gradient-to-r from-cyan-300 via-teal-200 to-white bg-clip-text text-transparent">
-              with Neural Precision
-            </span>
-          </motion.h1>
-
-          {/* Subtitle */}
-          <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2, ease: 'easeOut' }}
-            className="mx-auto mt-6 max-w-2xl text-base sm:text-lg leading-relaxed text-slate-300"
-          >
-            Clarity Mesh fuses <strong className="text-white font-bold">EfficientNet-B7</strong> visual facial analysis,{' '}
-            <strong className="text-white font-bold">wav2vec2</strong> voice biometric anti-spoofing, and{' '}
-            <strong className="text-white font-bold">2D Fourier FFT</strong> generative artifact detection into an obsidian forensic workstation.
-          </motion.p>
-
-          {/* Action CTAs */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3, ease: 'easeOut' }}
-            className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
-          >
-            <motion.a
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              href="#analyze"
-              className="btn-glossy-primary btn-shimmer relative w-full sm:w-auto rounded-2xl px-8 py-3.5 text-sm font-extrabold text-white shadow-xl shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all text-center"
+        <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
+          <div>
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
+              className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-1.5 text-xs font-bold text-cyan-200 backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.25)]"
             >
-              Start Media Analysis
-            </motion.a>
-            <motion.a
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              href="#how-it-works"
-              className="btn-glossy-black w-full sm:w-auto rounded-2xl px-7 py-3.5 text-sm font-bold text-slate-200 transition-all text-center"
-            >
-              Explore Architecture
-            </motion.a>
-          </motion.div>
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-400" />
+              </span>
+              Multimodal Forensic Intelligence Platform
+            </motion.div>
 
-          {/* Stats Bar */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.4, ease: 'easeOut' }}
-            className="mt-14"
-          >
-            <div className="mx-auto flex max-w-lg flex-wrap items-center justify-center gap-8 sm:gap-12 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 backdrop-blur-xl">
+            <motion.h1
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.1, ease: 'easeOut' }}
+              className="mt-7 text-4xl font-black leading-[1.04] tracking-tight text-white sm:text-6xl lg:text-7xl"
+            >
+              Enterprise-grade media integrity workflows
+              <span className="mt-2 block bg-gradient-to-r from-cyan-300 via-white to-teal-200 bg-clip-text text-transparent">
+                with stronger visual clarity
+              </span>
+            </motion.h1>
+
+            <motion.p
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2, ease: 'easeOut' }}
+              className="mt-6 max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg"
+            >
+              Clarity Mesh combines real multimodal detection, explainability, case management, reporting, and advanced research signals inside a more polished analyst experience built for serious review workflows.
+            </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3, ease: 'easeOut' }}
+              className="mt-10 flex flex-col gap-4 sm:flex-row"
+            >
+              <motion.a
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                href="#analyze"
+                className="btn-glossy-primary btn-shimmer relative rounded-2xl px-8 py-3.5 text-center text-sm font-extrabold text-white shadow-xl shadow-cyan-500/25 transition-all hover:shadow-cyan-500/40"
+              >
+                Launch Analysis Workspace
+              </motion.a>
+              <motion.a
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                href="/dashboard"
+                className="btn-glossy-black rounded-2xl px-7 py-3.5 text-center text-sm font-bold text-slate-200 transition-all"
+              >
+                Open Command Center
+              </motion.a>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.4, ease: 'easeOut' }}
+              className="mt-10 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+            >
               {STATS.map((stat) => (
-                <div key={stat.label} className="text-center">
-                  <p className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">{stat.value}</p>
-                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{stat.label}</p>
+                <div key={stat.label} className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 backdrop-blur-xl">
+                  <p className="text-lg font-black tracking-tight text-white sm:text-xl">{stat.value}</p>
+                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{stat.label}</p>
                 </div>
               ))}
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.5, ease: 'easeOut' }}
+              className="mt-8 grid gap-4 sm:grid-cols-3"
+            >
+              {HIGHLIGHTS.map((item) => (
+                <div key={item.title} className="rounded-3xl border border-white/[0.08] bg-white/[0.03] p-5">
+                  <h3 className="text-sm font-bold tracking-tight text-white">{item.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.text}</p>
+                </div>
+              ))}
+            </motion.div>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, x: 18 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.7, delay: 0.25, ease: 'easeOut' }}
+            className="glass-card overflow-hidden p-6 sm:p-7"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-cyan-300">Analyst Command Deck</p>
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-white">Live-ready operational surface</h2>
+              </div>
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300">
+                Workflow active
+              </span>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-3xl border border-cyan-500/20 bg-cyan-500/[0.05] p-5">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-300">Core stack</p>
+                <p className="mt-3 text-lg font-bold text-white">EfficientNet-B7 + wav2vec2 + CLIP + spectral forensics</p>
+                <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                  Combines neural inference with ELA, FFT, SRM, explainability, and reporting in one review loop.
+                </p>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Decision lane</p>
+                <div className="mt-3 space-y-3">
+                  {[
+                    ['Analyze', 'Multimodal detection'],
+                    ['Investigate', 'Case linking + notes'],
+                    ['Validate', 'Research and evaluation'],
+                    ['Report', 'Export and share'],
+                  ].map(([title, text], index) => (
+                    <div key={title} className="flex items-center gap-3">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-2xl border border-white/10 bg-black/20 text-[11px] font-black text-white">
+                        0{index + 1}
+                      </span>
+                      <div>
+                        <p className="text-sm font-semibold text-white">{title}</p>
+                        <p className="text-xs text-slate-400">{text}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-3xl border border-white/10 bg-black/20 p-5">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Surface upgrades included</p>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-violet-300">New in UI</span>
+              </div>
+              <div className="mt-4 grid gap-3">
+                {[
+                  ['Operational dashboard intelligence', 'Time-range switching, triage alerts, and queue-focused recommendations.'],
+                  ['Advanced analysis controls', 'Robustness, watermark readiness, attribution hooks, and experimental video signals.'],
+                  ['More premium visual hierarchy', 'Sharper cards, cleaner density, stronger emphasis, and more executive-grade presentation.'],
+                ].map(([title, text]) => (
+                  <div key={title} className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+                    <p className="text-sm font-semibold text-white">{title}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-400">{text}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </motion.div>
         </div>
-
-        {/* Feature Cards Grid */}
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.5, ease: 'easeOut' }}
-          className="mx-auto mt-16 grid max-w-4xl gap-5 sm:grid-cols-3"
-        >
-          {HIGHLIGHTS.map((item, idx) => (
-            <motion.div
-              key={item.title}
-              whileHover={{ y: -6, scale: 1.015 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-              className="group glass-card p-6 text-left relative overflow-hidden"
-            >
-              {/* Subtle top radiant border gradient on hover */}
-              <div className={`absolute inset-0 bg-gradient-to-b ${item.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none`} />
-
-              <span className={`inline-flex h-11 w-11 items-center justify-center rounded-xl border ${item.iconColor} shadow-inner`}>
-                {item.icon}
-              </span>
-              <h3 className="mt-4 text-base font-bold text-white tracking-tight">{item.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.text}</p>
-            </motion.div>
-          ))}
-        </motion.div>
       </div>
     </section>
   );

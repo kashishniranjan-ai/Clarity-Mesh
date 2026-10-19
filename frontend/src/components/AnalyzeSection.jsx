@@ -7,6 +7,7 @@ import ProvenanceCard from './ProvenanceCard';
 import HeatmapViewer from './HeatmapViewer';
 import ForensicNarrative from './ForensicNarrative';
 import AnalysisPipeline from './AnalysisPipeline';
+import AdvancedResearchPanel from './AdvancedResearchPanel';
 import {
   API_BASE_URL,
   MAX_UPLOAD_SIZE_MB,
@@ -680,6 +681,7 @@ export default function AnalyzeSection() {
   const multimodal = result?.multimodal_analysis || null;
   const ensemble = result?.calibrated_ensemble || null;
   const forensicSignals = result?.forensic_signals || {};
+  const resolvedAnalysisId = result?.analysis_id ?? result?.id ?? null;
 
   const seekPreviewToFrame = (frame) => {
     const video = document.getElementById('cm-preview-video');
@@ -857,6 +859,7 @@ export default function AnalyzeSection() {
                   { id: 'explain', label: 'Explainability & Grad-CAM', icon: '🔬' },
                   { id: 'spectrogram', label: 'Multi-Spectral Forensics (ELA / FFT / Noise)', icon: '🌊' },
                   { id: 'evidence', label: 'Evidence & Provenance Checklist', icon: '📋' },
+                  { id: 'advanced', label: 'Advanced Research & Robustness', icon: '🧪' },
                   { id: 'radar', label: 'Forensic Vector Radar', icon: '🌐' },
                 ].map((t) => (
                   <button
@@ -1069,6 +1072,15 @@ export default function AnalyzeSection() {
                     metadata={forensicSignals.metadata}
                   />
                 </div>
+              )}
+
+              {resultsTab === 'advanced' && (
+                <AdvancedResearchPanel
+                  storedName={fileInfo?.saved_as}
+                  analysisId={resolvedAnalysisId}
+                  mediaType={result?.media_type}
+                  visualStatus={visual?.status}
+                />
               )}
 
               {/* TAB 4: RADAR VECTOR */}
