@@ -39,7 +39,7 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-[#030407] flex items-center justify-center p-6 text-white text-center">
+        <div className="min-h-screen bg-canvas-bg flex items-center justify-center p-6 text-white text-center">
           <div className="glass-card max-w-md p-8 border border-cyan-500/30">
             <h2 className="text-xl font-bold text-white mb-2">Workspace Reset</h2>
             <p className="text-xs text-slate-400 mb-6">
@@ -104,7 +104,7 @@ function AppShell() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#030407]">
+      <div className="flex min-h-screen items-center justify-center bg-canvas-bg">
         <div className="h-9 w-9 rounded-full border-2 border-cyan-500/20 border-t-cyan-400 animate-spin" />
       </div>
     );
@@ -117,7 +117,7 @@ function AppShell() {
 
   // Authenticated: Render full website experience with role-guarded routes
   return (
-    <div className="flex min-h-screen flex-col bg-[#030407]">
+    <div className="flex min-h-screen flex-col bg-canvas-bg">
       <ScrollManager />
       <CommandPalette
         isOpen={cmdOpen}

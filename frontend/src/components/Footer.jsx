@@ -5,7 +5,7 @@ export default function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="relative border-t border-white/[0.08] bg-[#030407] py-14">
+    <footer className="relative border-t border-white/[0.08] bg-canvas-bg py-14">
       {/* Subtle top ambient glow */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 h-px w-2/3 bg-gradient-to-r from-transparent via-cyan-500/35 to-transparent" />
 

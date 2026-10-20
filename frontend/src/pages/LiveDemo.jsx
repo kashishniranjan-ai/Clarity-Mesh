@@ -399,7 +399,7 @@ export default function LiveDemo() {
   };
 
   return (
-    <div className="min-h-screen bg-[#030407] text-slate-100 py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-canvas-bg text-slate-100 py-8 px-4 sm:px-6 lg:px-8">
       {/* Hidden processing canvas */}
       <canvas ref={canvasRef} className="hidden" />
 

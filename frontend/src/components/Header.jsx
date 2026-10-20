@@ -33,7 +33,7 @@ export default function Header({ onOpenCommandPalette }) {
   ];
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-white/[0.08] bg-[#030407]/90 backdrop-blur-2xl transition-all shadow-[0_4px_30px_rgba(0,0,0,0.8)]">
+    <header className="sticky top-0 z-40 w-full border-b border-white/[0.08] bg-canvas-bg/90 backdrop-blur-2xl transition-all shadow-[0_4px_30px_rgba(0,0,0,0.8)]">
       {/* Top Specular Reflection Highlight */}
       <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent" />
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -233,7 +233,7 @@ export default function Header({ onOpenCommandPalette }) {
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
-            className="flex flex-col gap-1.5 border-t border-white/[0.08] bg-[#030407]/95 px-5 py-4 backdrop-blur-2xl xl:hidden overflow-hidden"
+            className="flex flex-col gap-1.5 border-t border-white/[0.08] bg-canvas-bg/95 px-5 py-4 backdrop-blur-2xl xl:hidden overflow-hidden"
             aria-label="Mobile navigation"
           >
             {links.map((link) => (
